@@ -1,4 +1,4 @@
-# exo-nailer
+# exonailer
 
 The **EXO**planet tra**N**sits and r**A**d**I**al ve**L**ocity fitt**ER** (**EXO**-**NAILER**), is 
 an easy-to-use code that allows you to efficiently fit exoplanet transit lightcurves, radial velocities 
