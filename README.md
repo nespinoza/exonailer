@@ -1,6 +1,6 @@
 # exofit
 
-EXOFIT is the Exoplanet Fitter, which makes use of two important pieces of code:
+EXOFIT is the EXOplanet FITter, which makes use of two important pieces of code:
 
     + The Bad-Ass Transit Model cAlculatioN (batman) for transit modelling.
       -> http://astro.uchicago.edu/~kreidberg/batman/
@@ -8,9 +8,9 @@ EXOFIT is the Exoplanet Fitter, which makes use of two important pieces of code:
       -> http://dan.iel.fm/emcee/current/
 
 The idea is for this code to be able to:
-    - Fit transit lightcurves (Done!).
-    - Fit RV data (Under development).
-    - Both simultaneously (Under development).
+    + Fit transit lightcurves (Done!).
+    + Fit RV data (Under development).
+    + Both simultaneously (Under development).
 
 DEPENDENCIES
 ------------
