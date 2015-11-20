@@ -35,7 +35,10 @@ q2 = 0.5
 #    'full'     :   Full transit + rvs fit.
 #    'transit'  :   Only fit transit lightcurve.
 #    'rvs'      :   Only fit RVs.
-mode = 'transit' 
+mode = 'full' 
+
+# Define noise properties:
+rv_jitter = False
 
 ################################################
 ############ DATA PRE-PROCESSING ###############
@@ -93,12 +96,18 @@ if mode == 'full':
     sigma_w_rv = np.sqrt(np.var(rv))
 
     # Define the priors on the transit + rvs:
-    theta_0 = P,inc,a,p,t0,q1,q2,sigma_w,mu,K,sigma_w_rv
+    if rv_jitter:
+        theta_0 = P,inc,a,p,t0,q1,q2,sigma_w,mu,K,sigma_w_rv
+    else:
+        theta_0 = P,inc,a,p,t0,q1,q2,sigma_w,mu,K
 
     # And the std-devs of the transit parameters + noise params
     # (note no std-devs on ld coeffs) + same for rvs. Also, sigma 
     # on noise params is the upper limit on the noise, which has a Jeffrey's prior:
-    sigma_theta_0 = 0.1,5.,10.,0.1,0.1,2000.0,1.0,1.0,1.0
+    if rv_jitter:
+        sigma_theta_0 = 0.1,5.,10.,0.1,0.1,2000.0,1.0,1.0,10.0
+    else:
+        sigma_theta_0 = 0.1,5.,10.,0.1,0.1,2000.0,1.0,1.0
 
 elif mode == 'transit':
     # Fit white-noise model. For this, fill the priors:
@@ -115,9 +124,14 @@ elif mode == 'transit':
 # Run the MCMC:
 theta_out = transit_utils.exonailer_mcmc_fit(t, f, f_err, t_rv, rv, rv_err, \
                                              theta_0, sigma_theta_0, \
-                                             ld_law, mode, njumps=100, nburnin = 100, \
+                                             ld_law, mode, rv_jitter = rv_jitter, \
+                                             njumps=500, nburnin = 500, \
                                              nwalkers = 100,  noise_model = 'white')
+for chain_var in theta_out:
+    print np.median(chain_var),'+-',np.sqrt(np.var(chain_var))
 
 # Get plot of the transit-fit:
 if mode == 'transit':
     transit_utils.plot_transit(t,f,theta_out,ld_law)
+elif mode == 'full':
+    transit_utils.plot_transit_and_rv(t,f,t_rv,rv,rv_err,theta_out,ld_law,rv_jitter)

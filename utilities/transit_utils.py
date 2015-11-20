@@ -57,10 +57,11 @@ def reverse_ld_coeffs(ld_law, q1, q2):
         coeff2 = 1.-np.sqrt(q1)#(1.-coeff1)/(1.-coeff2.)
     return coeff1,coeff2
 
+import emcee
 import Wavelets
 import scipy.optimize as op
 def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
-                       theta_0, sigma_theta_0, ld_law, mode, \
+                       theta_0, sigma_theta_0, ld_law, mode, rv_jitter = False, \
                        njumps = 500, nburnin = 500, nwalkers = 100, noise_model = 'white'):
     """
     This function performs an MCMC fitting procedure using a transit model 
@@ -122,7 +123,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
 
                           K:            RV semi-amplitude.
 
-                          sigma_w_Rv:   RV jitter 
+                          sigma_w_Rv:   RV jitter (if rv_jitter = True)
 
       sigma_theta_0:    Array with the standard-deviations of the priors stated above,
                         in the same order as the parameters.
@@ -151,8 +152,10 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
     The outputs are the chains of each of the parameters in the theta_0 array in the same 
     order as they were inputted. This includes the sampled parameters from all the walkers.
     """
-    # Initialize the parameters:
-    params,m = init_batman(times,law=ld_law)
+
+    if mode != 'rv':
+        # Initialize the parameters:
+        params,m = init_batman(times,law=ld_law)
 
     def get_fn_likelihood(residuals, sigma_w, sigma_r, gamma=1.0):
         like=0.0
@@ -183,7 +186,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                       k=k+1
         return like
 
-    def lnlike(theta, t, y, yerr, gamma=1.0):
+    def lnlike_transit(theta, t, y, yerr, gamma=1.0):
         if noise_model == '1/f':
             P,inc,a,p,t0,q1,q2,sigma_w,sigma_r = theta
         else:
@@ -207,7 +210,35 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
            log_like = -0.5*(np.sum(((y-model)*1e6)**2*inv_sigma2 - np.log(inv_sigma2)))
         return log_like
 
-    def lnprior(theta):
+    def lnlike_rv(theta, t, y, yerr):
+        mu,K,P,t0,sigma_w = theta
+        model = mu - K*np.sin(2.*np.pi*(t-t0)/P)
+        residuals = (y-model)
+        inv_sigma2 = 1.0/((yerr)**2 + (sigma_w)**2)
+        log_like = -0.5*(np.sum((residuals)**2*inv_sigma2 - np.log(inv_sigma2)))
+        return log_like
+
+    def lnlike_full(theta, tt, yt, yerrt, trv, yrv, yerrrv):
+        if noise_model == '1/f':
+            if rv_jitter:
+               P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K,sigma_w_rv = theta
+            else:
+               P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K = theta
+               sigma_w_rv = 0
+
+            return lnlike_rv([mu,K,P,t0,sigma_w_rv], trv, yrv, yerrrv) + \
+                   lnlike_transit([P,inc,a,p,t0,q1,q2,sigma_w,sigma_r], tt, yt, yerrt)
+        else:
+            if rv_jitter:
+                P,inc,a,p,t0,q1,q2,sigma_w,mu,K,sigma_w_rv = theta
+            else:
+                P,inc,a,p,t0,q1,q2,sigma_w,mu,K = theta
+                sigma_w_rv = 0.
+
+            return lnlike_rv([mu,K,P,t0,sigma_w_rv], trv, yrv, yerrrv) + \
+                   lnlike_transit([P,inc,a,p,t0,q1,q2,sigma_w], tt, yt, yerrt)
+
+    def lnprior_transit(theta):
         if noise_model == '1/f':
             P,inc,a,p,t0,q1,q2,sigma_w,sigma_r = theta
             if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0 or sigma_r < 1.0 \
@@ -246,63 +277,230 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
 
         return lnp_sigma + lnp_sigma_r + lnp_inc + lnp_a + lnp_p + lnp_t0 + lnp_P
 
-    def lnprob(theta, x, y, yerr):
-        lp = lnprior(theta)
+    def lnprior_full(theta):
+        if noise_model == '1/f':
+            if rv_jitter:
+                P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K,sigma_w_rv = theta
+                if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0 or sigma_r < 1.0 \
+                    or p < 0 or p>1 or P < 0 or inc<0 or inc>90.0 or sigma_w_rv<0 \
+                    or a<1:
+                    return -np.inf
+
+                P_0,inc_0,a_0,p_0,t0_0,q1_0,q2_0,sigma_w_0,sigma_r_0,mu_0,K_0,sigma_w_rv_0 = theta_0
+                sigma_P, sigma_inc, sigma_a, sigma_p, sigma_t0, up_lim_sigma_w, up_lim_sigma_r, sigma_mu, \
+                sigma_K, up_lim_sigma_w_rv = sigma_theta_0
+
+                if sigma_w > up_lim_sigma_w or sigma_r > up_lim_sigma_r or sigma_w_rv > up_lim_sigma_w_rv:
+                    return -np.inf
+
+                lnp_sigma_rv = -np.log((sigma_w_rv)*np.log(up_lim_sigma_w_rv))
+
+            else:
+                P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K = theta
+                if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0 or sigma_r < 1.0 \
+                    or p < 0 or p>1 or P < 0 or inc<0 or inc>90.0 \
+                    or a<1:
+                    return -np.inf
+            
+                P_0,inc_0,a_0,p_0,t0_0,q1_0,q2_0,sigma_w_0,sigma_r_0,mu_0,K_0 = theta_0
+                sigma_P, sigma_inc, sigma_a, sigma_p, sigma_t0, up_lim_sigma_w, up_lim_sigma_r, sigma_mu, \
+                sigma_K = sigma_theta_0
+               
+                if sigma_w > up_lim_sigma_w or sigma_r > up_lim_sigma_r:
+                    return -np.inf
+
+                lnp_sigma_rv = 0
+
+            lnp_sigma_r = -np.log((sigma_r)*np.log((up_lim_sigma_r)))
+        else:
+            if rv_jitter:
+                P,inc,a,p,t0,q1,q2,sigma_w,mu,K,sigma_w_rv = theta
+                if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0\
+                    or p < 0 or p>1 or P < 0 or inc<0 or inc>90.0 or sigma_w_rv<0 \
+                    or a<1:
+                    return -np.inf
+
+                P_0,inc_0,a_0,p_0,t0_0,q1_0,q2_0,sigma_w_0,mu_0,K_0,sigma_w_rv_0 = theta_0
+                sigma_P, sigma_inc, sigma_a, sigma_p, sigma_t0, up_lim_sigma_w, sigma_mu, \
+                sigma_K, up_lim_sigma_w_rv = sigma_theta_0
+
+                if sigma_w > up_lim_sigma_w or sigma_w_rv > up_lim_sigma_w_rv:
+                    return -np.inf
+                lnp_sigma_rv = -np.log((sigma_w_rv)*np.log(up_lim_sigma_w_rv))
+            else:
+                P,inc,a,p,t0,q1,q2,sigma_w,mu,K = theta
+                if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0\
+                    or p < 0 or p>1 or P < 0 or inc<0 or inc>90.0 \
+                    or a<1:
+                    return -np.inf
+
+                P_0,inc_0,a_0,p_0,t0_0,q1_0,q2_0,sigma_w_0,mu_0,K_0 = theta_0
+                sigma_P, sigma_inc, sigma_a, sigma_p, sigma_t0, up_lim_sigma_w, sigma_mu, \
+                sigma_K = sigma_theta_0
+
+                if sigma_w > up_lim_sigma_w:
+                    return -np.inf
+
+                lnp_sigma_rv = 0.
+
+            lnp_sigma_r = 0.0
+
+        # Jeffrey's prior on sigma_w, sigma_r and sigma_w_rv; uniforms on q1,q2:
+        lnp_sigma = -np.log((sigma_w)*np.log(up_lim_sigma_w))
+        lnp_inc = -0.5*(((inc-inc_0)**2/(sigma_inc**2)))
+        lnp_a = -0.5*(((a-a_0)**2/(sigma_a**2)))
+        lnp_p = -0.5*(((p-p_0)**2/(sigma_p**2)))
+        lnp_t0 = -0.5*(((t0-t0_0)**2/(sigma_t0**2)))
+        lnp_P = -0.5*(((P-P_0)**2/(sigma_P**2)))
+        lnp_mu = -0.5*(((mu-mu_0)**2/(sigma_mu**2)))
+        lnp_K = -0.5*(((K-K_0)**2/(sigma_K**2)))
+
+        return lnp_sigma + lnp_sigma_r + lnp_inc + lnp_a + lnp_p + lnp_t0 + lnp_P + lnp_mu + lnp_K + lnp_sigma_rv
+
+    def lnprob_transit(theta, x, y, yerr):
+        lp = lnprior_transit(theta)
         if not np.isfinite(lp):
             return -np.inf
-        return lp + lnlike(theta, x, y, yerr)
+        return lp + lnlike_transit(theta, x, y, yerr)
 
-    # Define the variables for the MCMC:
-    x = times.astype('float64')
-    y = relative_flux.astype('float64')
-    if error is None:
-       yerr = 0.0
-    else:
-       yerr = error.astype('float64')
+    def lnprob_full(theta, xt, yt, yerrt, xrv, yrv, yerrrv):
+        lp = lnprior_full(theta)
+        if not np.isfinite(lp):
+            return -np.inf
+        return lp + lnlike_full(theta, xt, yt, yerrt, xrv, yrv, yerrrv)
 
-    # Start at the maximum likelihood value:
-    nll = lambda *args: -lnprob(*args)
-    result = op.minimize(nll, theta_0, args=(x, y, yerr))
-    theta_ml = result["x"]
+    if mode == 'full':
+        xt = times.astype('float64')
+        yt = relative_flux.astype('float64')
+        if error is None:
+            yerrt = 0.0
+        else:
+            yerrt = error.astype('float64')
 
-    # Now define parameters for emcee:
-    ndim = len(theta_ml)
-    pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
+        xrv = times_rv.astype('float64')
+        yrv = rv.astype('float64')
+        if rv_err is None:
+            yerrrv = 0.0
+        else:
+            yerrrv = rv_err.astype('float64')
 
-    # Run the MCMC:
-    import emcee
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(x, y, yerr))
+        lnprob = lnprob_full 
 
-    sampler.run_mcmc(pos, njumps+nburnin)
+        # Start at the maximum likelihood value:
+        nll = lambda *args: -lnprob_full(*args)
+        result = op.minimize(nll, theta_0, args=(xt, yt, yerrt, xrv, yrv, yerrrv))
+        theta_ml = result["x"]
 
-    # Save the parameter chains:
-    P = np.array([])
-    inc = np.array([])
-    a = np.array([])
-    p = np.array([])
-    t0 = np.array([])
-    q1 = np.array([])
-    q2 = np.array([])
-    sigma_w = np.array([])
-    if noise_model == '1/f':
-       sigma_r = np.array([])
-    for walker in range(nwalkers):
-        P = np.append(P,sampler.chain[walker,nburnin:,0])
-        inc = np.append(inc,sampler.chain[walker,nburnin:,1])
-        a = np.append(a,sampler.chain[walker,nburnin:,2])
-        p = np.append(p,sampler.chain[walker,nburnin:,3])
-        t0 = np.append(t0,sampler.chain[walker,nburnin:,4])
-        q1 = np.append(q1,sampler.chain[walker,nburnin:,5])
-        q2 = np.append(q2,sampler.chain[walker,nburnin:,6])
-        sigma_w = np.append(sigma_w,sampler.chain[walker,nburnin:,7])
+        # Now define parameters for emcee:
+        ndim = len(theta_ml)
+        pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
+
+        # Run the MCMC:
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(xt, yt, yerrt, xrv, yrv, yerrrv))
+
+        sampler.run_mcmc(pos, njumps+nburnin)
+
+        # Save the parameter chains:
+        P = np.array([])
+        inc = np.array([])
+        a = np.array([])
+        p = np.array([])
+        t0 = np.array([])
+        q1 = np.array([])
+        q2 = np.array([])
+        sigma_w = np.array([])
         if noise_model == '1/f':
-            sigma_r = np.append(sigma_r,sampler.chain[walker,nburnin:,8])
+            sigma_r = np.array([])
+        mu = np.array([])
+        K = np.array([])
+        if rv_jitter:
+            sigma_w_rv = np.array([])
+        for walker in range(nwalkers):
+            P = np.append(P,sampler.chain[walker,nburnin:,0])
+            inc = np.append(inc,sampler.chain[walker,nburnin:,1])
+            a = np.append(a,sampler.chain[walker,nburnin:,2])
+            p = np.append(p,sampler.chain[walker,nburnin:,3])
+            t0 = np.append(t0,sampler.chain[walker,nburnin:,4])
+            q1 = np.append(q1,sampler.chain[walker,nburnin:,5])
+            q2 = np.append(q2,sampler.chain[walker,nburnin:,6])
+            sigma_w = np.append(sigma_w,sampler.chain[walker,nburnin:,7])
+            if noise_model == '1/f':
+                sigma_r = np.append(sigma_r,sampler.chain[walker,nburnin:,8])
+                mu = np.append(mu,sampler.chain[walker,nburnin:,9])
+                K = np.append(K,sampler.chain[walker,nburnin:,10])
+                if rv_jitter:
+                    sigma_w_rv = np.append(sigma_w_rv,sampler.chain[walker,nburnin:,11])
+            else:
+                mu = np.append(mu,sampler.chain[walker,nburnin:,8])
+                K = np.append(K,sampler.chain[walker,nburnin:,9])
+                if rv_jitter:
+                    sigma_w_rv = np.append(sigma_w_rv,sampler.chain[walker,nburnin:,10])
 
-    # Return the chains:
-    if noise_model == '1/f':
-        return P,inc,a,p,t0,q1,q2,sigma_w,sigma_r
-    else:
-        return P,inc,a,p,t0,q1,q2,sigma_w
+        # Return the chains:
+        if noise_model == '1/f':
+            if rv_jitter:
+                return P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K,sigma_w_rv
+            else:
+                return P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K
+        else:
+            if rv_jitter:
+                return P,inc,a,p,t0,q1,q2,sigma_w,mu,K,sigma_w_rv
+            else:
+                return P,inc,a,p,t0,q1,q2,sigma_w,mu,K
+
+    elif mode == 'transit':
+        # Define the variables for the transit MCMC:
+        x = times.astype('float64')
+        y = relative_flux.astype('float64')
+        if error is None:
+            yerr = 0.0
+        else:
+            yerr = error.astype('float64')
+
+        lnprob = lnprob_transit
+
+        # Start at the maximum likelihood value:
+        nll = lambda *args: -lnprob(*args)
+        result = op.minimize(nll, theta_0, args=(x, y, yerr))
+        theta_ml = result["x"]
+
+        # Now define parameters for emcee:
+        ndim = len(theta_ml)
+        pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
+
+        # Run the MCMC:
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(x, y, yerr))
+
+        sampler.run_mcmc(pos, njumps+nburnin)
+
+        # Save the parameter chains:
+        P = np.array([])
+        inc = np.array([])
+        a = np.array([])
+        p = np.array([])
+        t0 = np.array([])
+        q1 = np.array([])
+        q2 = np.array([])
+        sigma_w = np.array([])
+        if noise_model == '1/f':
+            sigma_r = np.array([])
+        for walker in range(nwalkers):
+            P = np.append(P,sampler.chain[walker,nburnin:,0])
+            inc = np.append(inc,sampler.chain[walker,nburnin:,1])
+            a = np.append(a,sampler.chain[walker,nburnin:,2])
+            p = np.append(p,sampler.chain[walker,nburnin:,3])
+            t0 = np.append(t0,sampler.chain[walker,nburnin:,4])
+            q1 = np.append(q1,sampler.chain[walker,nburnin:,5])
+            q2 = np.append(q2,sampler.chain[walker,nburnin:,6])
+            sigma_w = np.append(sigma_w,sampler.chain[walker,nburnin:,7])
+            if noise_model == '1/f':
+                sigma_r = np.append(sigma_r,sampler.chain[walker,nburnin:,8])
+
+        # Return the chains:
+        if noise_model == '1/f':
+            return P,inc,a,p,t0,q1,q2,sigma_w,sigma_r
+        else:
+            return P,inc,a,p,t0,q1,q2,sigma_w
 
 import matplotlib.pyplot as plt
 def plot_transit(t,f,theta,ld_law):
@@ -345,4 +543,62 @@ def plot_transit(t,f,theta,ld_law):
     plt.plot(phases,f,'.',color='black',alpha=0.4)
     plt.plot(model_phase[idx],model_lc[idx])
     plt.plot(phases,f-model_pred+(1-1.2*(p**2)),'.',color='black',alpha=0.4)
+    plt.show()
+
+def plot_transit_and_rv(t,f,trv,rv,rv_err,theta,ld_law,rv_jitter):
+    # Extract parameters:
+    if rv_jitter:
+        P_c,inc_c,a_c,p_c,t0_c,q1_c,q2_c,sigma_w_c,mu_c,K_c,sigma_w_rv_c = theta
+
+    else:
+        P_c,inc_c,a_c,p_c,t0_c,q1_c,q2_c,sigma_w_c,mu_c,K_c = theta
+    P = np.median(P_c)
+    inc = np.median(inc_c)
+    a = np.median(a_c)
+    p = np.median(p_c)
+    t0 = np.median(t0_c)
+    q1 = np.median(q1_c)
+    q2 = np.median(q2_c)
+    mu = np.median(mu_c)
+    K = np.median(K_c)
+
+    # Get data phases:
+    phases = get_phases(t,P,t0)
+
+    # Generate model times by super-sampling the times:
+    model_t = np.linspace(np.min(t),np.max(t),len(t)*100)
+    model_phase = get_phases(model_t,P,t0)
+
+    # Generate model lightcurve and predicted one:
+    params,m = init_batman(model_t,law=ld_law)
+    params2,m2 = init_batman(t,law=ld_law)
+    coeff1,coeff2 = reverse_ld_coeffs(ld_law, q1, q2)
+    params.t0 = t0
+    params.per = P
+    params.rp = p
+    params.a = a
+    params.inc = inc
+    params.u = [coeff1,coeff2]
+    model_lc = m.light_curve(params)
+    model_pred = m2.light_curve(params)
+
+    # Now plot:
+    plt.style.use('ggplot')
+    plt.subplot(211)
+    #plt.xlabel('Phase')
+    plt.ylabel('Relative flux')
+    idx = np.argsort(model_phase)
+    plt.plot(phases,f,'.',color='black',alpha=0.4)
+    plt.plot(model_phase[idx],model_lc[idx])
+    plt.plot(phases,f-model_pred+(1-1.2*(p**2)),'.',color='black',alpha=0.4)
+
+    plt.subplot(212)
+    plt.ylabel('Radial velocity (m/s)')
+    plt.xlabel('Phase')
+    model_rv = mu - K*np.sin(2.*np.pi*model_phase)
+    rv_phases = get_phases(trv,P,t0)
+    plt.errorbar(rv_phases,(rv-mu)*1e3,yerr=rv_err*1e3,fmt='o')
+    plt.plot(model_phase[idx],(model_rv[idx]-mu)*1e3)
+    plt.show()
+    plt.hist(K_c,bins = 500)
     plt.show()
