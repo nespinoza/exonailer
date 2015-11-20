@@ -1,21 +1,22 @@
 # exo-nailer
 
-The **EXO**planet tra**N**sits and r**A**d**I**al ve**L**ocity fitt**ER** (**EXO**-**NAILER**), is an easy-to-use code 
-that allows you to efficiently fit exoplanet transit lightcurves, radial velocities 
-or both. It makes use of two important pieces of code:
+The **EXO**planet tra**N**sits and r**A**d**I**al ve**L**ocity fitt**ER** (**EXO**-**NAILER**), is 
+an easy-to-use code that allows you to efficiently fit exoplanet transit lightcurves, radial velocities 
+or both. 
 
-    + The Bad-Ass Transit Model cAlculatioN (batman) for transit modelling.
-      -> http://astro.uchicago.edu/~kreidberg/batman/
-    + emcee for MCMC sampling.
-      -> http://dan.iel.fm/emcee/current/
+Author: Néstor Espinoza (nespino@astro.puc.cl)
 
 DEPENDENCIES
 ------------
 
-This code makes use of three important libraries:
+This code makes use of four important libraries:
 
-        + Numpy.
-        + Scipy.
+    + Numpy.
+    + Scipy.
+    + The Bad-Ass Transit Model cAlculatioN (batman) for transit modelling.
+      -> http://astro.uchicago.edu/~kreidberg/batman/
+    + emcee for MCMC sampling.
+      -> http://dan.iel.fm/emcee/current/
 
 All of them are open source and can be easily installed in any machine.
 
