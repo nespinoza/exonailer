@@ -59,9 +59,9 @@ def reverse_ld_coeffs(ld_law, q1, q2):
 
 import Wavelets
 import scipy.optimize as op
-def transit_mcmc_fit(times, relative_flux, error, theta_0, sigma_theta_0, \
-                     ld_law,njumps, nburnin = 500, nwalkers = 100, \
-                     noise_model = 'white'):
+def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
+                       theta_0, sigma_theta_0, ld_law, mode, \
+                       njumps = 500, nburnin = 500, nwalkers = 100, noise_model = 'white'):
     """
     This function performs an MCMC fitting procedure using a transit model 
     fitted to input data using the batman package (Kreidberg, 2015) assuming 
@@ -82,33 +82,47 @@ def transit_mcmc_fit(times, relative_flux, error, theta_0, sigma_theta_0, \
       error:            If you have errors on the fluxes, put them here. Otherwise, set 
                         this to None.
 
-      theta_input_0:    Array with the priors on the parameters to be fitted. They are 
-                        assumed to be in the following order:
- 
-                         theta_input_0 = [P,inc,a,p,t0,q1,q2,sigma_w,sigma_r]
+      times_rv:         Times (in same units as the period and time of transit center) 
+                        of RV data.
 
-                        The last parameter only has to be included if noise_model = '1/f' 
+      rv:               Radial velocity measurements.
+
+      rv_err:           If you have errors on the RVs, put them here. Otherwise, set 
+                        this to None.
+
+      theta_input_0:    Array with the priors on the parameters to be fitted. They are 
+                        assumed to be in the following order in 'full' mode :
+ 
+                      theta_input_0 = [P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K,sigma_w_rv]
+
+                        The parameter sigma_r only has to be included if noise_model = '1/f' 
                         (see below). Here:
 
-                          P:        Period (in the units of the times).
+                          P:            Period (in the units of the times).
 
-                          inc:      Inclination of the orbit (in degrees).
+                          inc:          Inclination of the orbit (in degrees).
 
-                          a:        Semi-major axis in stellar units.
+                          a:            Semi-major axis in stellar units.
 
-                          p:        Planet-to-star radius ratio.
+                          p:            Planet-to-star radius ratio.
 
-                          t0:       Time of transit center (same units as the times)
+                          t0:           Time of transit center (same units as the times)
 
-                          q1:       Prior on the first converted coefficient of whatever law you 
-                                    are going to use for the limb-darkening (see Kipping 2013).
+                          q1:           Prior on the first converted coefficient of whatever law you 
+                                        are going to use for the limb-darkening (see Kipping 2013).
 
-                          q2:       Same thing for the second coefficient.
+                          q2:           Same thing for the second coefficient.
 
-                          sigma_w:  Standard deviation of the underlying white-noise process.
+                          sigma_w:      Standard deviation of the underlying white-noise process.
  
-                          sigma_r:  Parameter of the 1/f noise process (used only if noise_model
-                                    set to 1/f; see below).
+                          sigma_r:      Parameter of the 1/f noise process (used only if noise_model
+                                        set to 1/f; see below).
+
+                          mu:           Mean RVs.
+
+                          K:            RV semi-amplitude.
+
+                          sigma_w_Rv:   RV jitter 
 
       sigma_theta_0:    Array with the standard-deviations of the priors stated above,
                         in the same order as the parameters.
@@ -116,6 +130,9 @@ def transit_mcmc_fit(times, relative_flux, error, theta_0, sigma_theta_0, \
       ld_law:           Two-coefficient limb-darkening law to be used. Can be 'quadratic',
                         'logarithmic', 'square-root' or 'exponential'. The last one is not 
                         recommended because it is non-physical (see Espinoza & Jordán, 2015b).
+
+
+      mode:             'full' = transit + rv fit, 'transit' = only transit fit, 'rv' = only RV fit.
 
       n_jumps:          Number of jumps to be done by each of the walkers in the MCMC. 
 
@@ -325,7 +342,7 @@ def plot_transit(t,f,theta,ld_law):
     plt.xlabel('Phase')
     plt.ylabel('Relative flux')
     idx = np.argsort(model_phase)
-    plt.plot(phases,f,'.',color='black',alpha=0.8)
+    plt.plot(phases,f,'.',color='black',alpha=0.4)
     plt.plot(model_phase[idx],model_lc[idx])
-    plt.plot(phases,f-model_pred+(1-1.2*(p**2)),'.',color='black',alpha=0.8)
+    plt.plot(phases,f-model_pred+(1-1.2*(p**2)),'.',color='black',alpha=0.4)
     plt.show()
