@@ -1,10 +1,10 @@
 # exo-nailer
 
-The *EXO*planet tra*N*sits and r*A*d*I*al ve*L*ocity fitt*ER* (*EXO*-*NAILER*), is an easy-to-use code 
+The **EXO**planet tra**N**sits and r**A**d**I**al ve**L**ocity fitt**ER** (**EXO**-**NAILER**), is an easy-to-use code 
 that allows you to efficiently fit exoplanet transit lightcurves, radial velocities 
 or both. It makes use of two important pieces of code:
 
-    + The *B*ad-*A*ss *T*ransit *M*odel c*A*lculatio*N* (batman) for transit modelling.
+    + The Bad-Ass Transit Model cAlculatioN (batman) for transit modelling.
       -> http://astro.uchicago.edu/~kreidberg/batman/
     + emcee for MCMC sampling.
       -> http://dan.iel.fm/emcee/current/
