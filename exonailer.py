@@ -56,7 +56,7 @@ if detrend is not None:
         from scipy.ndimage.filters import gaussian_filter
         filt = gaussian_filter(medfilt(f,window),5)
         f = f/filt
-        if f_err not None:
+        if f_err is not None:
             f_err = f_err/filt
 
 # Get the phases:

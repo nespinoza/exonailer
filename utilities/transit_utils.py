@@ -236,12 +236,12 @@ def transit_mcmc_fit(times, relative_flux, error, theta_0, sigma_theta_0, \
         return lp + lnlike(theta, x, y, yerr)
 
     # Define the variables for the MCMC:
-    x = times
-    y = relative_flux
+    x = times.astype('float64')
+    y = relative_flux.astype('float64')
     if error is None:
        yerr = 0.0
     else:
-       yerr = error
+       yerr = error.astype('float64')
 
     # Start at the maximum likelihood value:
     nll = lambda *args: -lnprob(*args)
