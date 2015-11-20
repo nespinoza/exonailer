@@ -1,6 +1,6 @@
 # exo-nailer
 
-The EXOplanet traNsit rAdIal veLocity fittER (EXO-NAILER), is an easy-to-use code 
+The EXOplanet traNsits and rAdIal veLocity fittER (EXO-NAILER), is an easy-to-use code 
 that allows you to efficiently fit exoplanet transit lightcurves, radial velocities 
 or both. It makes use of two important pieces of code:
 
