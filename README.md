@@ -8,6 +8,7 @@ EXOFIT is the EXOplanet FITter, which makes use of two important pieces of code:
       -> http://dan.iel.fm/emcee/current/
 
 The idea is for this code to be able to:
+
     + Fit transit lightcurves (Done!).
     + Fit RV data (Under development).
     + Both simultaneously (Under development).
