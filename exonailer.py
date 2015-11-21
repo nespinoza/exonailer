@@ -9,27 +9,28 @@ from math import floor,ceil
 
 # Define the target name, detrending method and parameters of this
 # method:
-target = 'CL005-04'
+target = 'CL001-04'
 detrend = 'mfilter'
-window = 21
+window = 41
+get_outliers = True
 
 # If you want any transits to be ommited in the fit (e.g., spots),
 # put the number of the transit (counted from first transit) in 
 # this list:
-n_ommit = [3,9]
+n_ommit = []#[3,9]
 
 # Initial transit parameters for the MCMC:
-P = 4.09844735818
-t0 = 2457067.90563
-a = 9.867860165894255
-p = 0.129865221295
-inc = 85.3172129026
-sigma_w = 500. # ppm
+P = 41.6927973464#4.09844735818
+t0 = 2457151.91171#2457067.90563
+a = 31.42363601700875#9.867860165894255
+p = 0.026944416288#0.129865221295
+inc = 88.4325339589#85.3172129026
+sigma_w = 500#500. # ppm
 
 # Initial ld law and (converted) coefficients:
 ld_law = 'quadratic'
-q1 = 0.5
-q2 = 0.5
+q1 = 0.659286671241
+q2 = 0.532312795382
 
 # Define the mode:
 #    'full'     :   Full transit + rvs fit.
@@ -89,6 +90,45 @@ if mode != 'rvs':
     f = f[idx]
     phases = phases[idx]
 
+    # If outlier removal is on, remove them:
+    if get_outliers:
+        params,m = transit_utils.init_batman(t,law=ld_law)
+        coeff1,coeff2 = transit_utils.reverse_ld_coeffs(ld_law, q1, q2)
+        params.t0 = t0
+        params.per = P
+        params.rp = p
+        params.a = a
+        params.inc = inc
+        params.u = [coeff1,coeff2]
+        model = m.light_curve(params)
+        # Get approximate transit duration in phase space:
+        phases = transit_utils.get_phases(t,P,t0)
+        idx = np.where(model == 1.0)[0]
+        phase_dur = np.abs(phases[idx][np.where(np.abs(phases[idx]) == np.min(np.abs(phases[idx])))])[0] + 0.01
+        # Get precision:
+        median_flux = np.median(f)
+        sigma = transit_utils.get_sigma(f,median_flux)
+        # Perform sigma-clipping for out-of-transit data using phased data:
+        good_times = np.array([])
+        good_fluxes = np.array([])
+        good_phases = np.array([])
+        for i in range(len(t)):
+                if np.abs(phases[i])<phase_dur:
+                        good_times = np.append(good_times,t[i])
+                        good_fluxes = np.append(good_fluxes,f[i])
+                        good_phases = np.append(good_phases,phases[i])
+                else:
+                        if (f[i]<median_flux + 3*sigma) and (f[i]>median_flux - 3*sigma):
+                                good_times = np.append(good_times,t[i])
+                                good_fluxes = np.append(good_fluxes,f[i])
+                                good_phases = np.append(good_phases,phases[i])
+        t = good_times
+        f = good_fluxes
+        phases = good_phases
+        import matplotlib.pyplot as plt
+        plt.plot(phases,f,'.')
+        plt.show()
+
 if mode == 'full':
     # Generate the priors on the mean RV and RV semi-amplitude:    
     mu = np.median(rv)
@@ -125,7 +165,7 @@ elif mode == 'transit':
 theta_out = transit_utils.exonailer_mcmc_fit(t, f, f_err, t_rv, rv, rv_err, \
                                              theta_0, sigma_theta_0, \
                                              ld_law, mode, rv_jitter = rv_jitter, \
-                                             njumps=500, nburnin = 500, \
+                                             njumps=100000, nburnin = 100000, \
                                              nwalkers = 100,  noise_model = 'white')
 for chain_var in theta_out:
     print np.median(chain_var),'+-',np.sqrt(np.var(chain_var))
