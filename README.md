@@ -126,8 +126,6 @@ True, you must also set a sigma_w_rv parameter for the jitter term.
 
 WHISH-LIST
 ----------
-    + Allow the code to handle priors from the outside (i.e., easier 
-      than going inside the utilities code).
 
     + Add example datasets.
 
