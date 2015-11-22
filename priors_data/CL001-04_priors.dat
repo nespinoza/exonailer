@@ -1,0 +1,11 @@
+# Parameter Name    Prior Type    Parameters  
+P                   Normal        41.6927973460,0.10
+t0                  Normal        2457151.91171,0.10
+a                   Normal        31.4236360170,10.0  
+p                   Normal        0.02694441628,0.10
+inc                 Normal        88.4325339589,3.00
+sigma_w             Jeffreys      1.,2000.0
+mu                  Normal        -20.3390375,1.0
+K                   Normal        0.1,0.1               
+q1                  Uniform       0.0,1.0
+q2                  Uniform       0.0,1.0

@@ -16,6 +16,101 @@ def get_phases(t,P,t0):
     phase[ii] = phase[ii]-1.0
     return phase
 
+def read_transit_params(prior_dict):
+    names = ['Period','inc','a','p','t0','q1','q2']
+    vals = len(names)*[[]]
+    for i in range(len(names)):
+        param = prior_dict[names[i]]
+        if param['type'] == 'Normal':
+                vals[i] = param['hyperparams'][0]
+        elif param['type'] == 'Uniform':
+                vals[i] = np.mean(param['hyperparams'])
+        elif param['type'] == 'Jeffreys':
+                vals[i] = np.sqrt(param['hyperparams'][0]*param['hyperparams'][1])
+        elif param['type'] == 'FIXED':
+                vals[i] = param['hyperparams']
+    return vals
+
+def pre_process(t,f,f_err,detrend,get_outliers,n_ommit,window,parameters,ld_law):
+    # Now, the first phase in transit fitting is to 'detrend' the 
+    # data. This is done with the 'detrend' flag. If 
+    # the data is already detrended, set the flag to None:
+    if detrend is not None:
+        if detrend == 'mfilter':
+            # Get median filter, and smooth it with a gaussian filter:
+            from scipy.signal import medfilt
+            from scipy.ndimage.filters import gaussian_filter
+            filt = gaussian_filter(medfilt(f,window),5)
+            f = f/filt
+            if f_err is not None:
+                f_err = f_err/filt
+
+    # Extract transit parameters from prior dictionary:
+    P,inc,a,p,t0,q1,q2 = read_transit_params(parameters)
+
+    # If the user wants to ommit transit events:
+    if len(n_ommit)>0:
+        # Get the phases:
+        phases = (t-t0)/P
+
+        # Get the transit events in phase space:
+        transit_events = np.arange(ceil(np.min(phases)),floor(np.max(phases))+1)
+
+        # Convert to zeros fluxes at the events you want to eliminate:
+        for n in n_ommit:
+            idx = np.where((phases>n-0.5)&(phases<n+0.5))[0]
+            f[idx] = np.zeros(len(idx))
+
+        # Eliminate them from the t,f and phases array:
+        idx = np.where(f!=0.0)[0]
+        t = t[idx]
+        f = f[idx]
+        phases = phases[idx]
+        if f_err is not None:
+            f_err = f_err[idx]
+
+    # Generate the phases:
+    phases = get_phases(t,P,t0)
+    # If outlier removal is on, remove them:
+    if get_outliers:
+        model = get_transit_model(t,t0,P,p,a,inc,q1,q2,ld_law)
+        # Get approximate transit duration in phase space:
+        idx = np.where(model == 1.0)[0]
+        phase_dur = np.abs(phases[idx][np.where(np.abs(phases[idx]) == \
+                           np.min(np.abs(phases[idx])))])[0] + 0.01
+        # Get precision:
+        median_flux = np.median(f)
+        sigma = get_sigma(f,median_flux)
+        # Perform sigma-clipping for out-of-transit data using phased data:
+        good_times = np.array([])
+        good_fluxes = np.array([])
+        good_phases = np.array([])
+        if f_err is not None:
+            good_errors = np.array([])
+
+        # Iterate through the dataset:
+        for i in range(len(t)):
+                if np.abs(phases[i])<phase_dur:
+                        good_times = np.append(good_times,t[i])
+                        good_fluxes = np.append(good_fluxes,f[i])
+                        good_phases = np.append(good_phases,phases[i])
+                        if f_err is not None:
+                           good_errors = np.append(good_errors,f_err[i])
+                else:
+                        if (f[i]<median_flux + 3*sigma) and (f[i]>median_flux - 3*sigma):
+                                good_times = np.append(good_times,t[i])
+                                good_fluxes = np.append(good_fluxes,f[i])
+                                good_phases = np.append(good_phases,phases[i])
+                                if f_err is not None:
+                                    good_errors = np.append(good_errors,f_err[i])
+        t = good_times
+        f = good_fluxes
+        phases = good_phases
+        if f_err is not None:
+            f_err = good_errors
+
+    return t, phases, f, f_err
+
 def init_batman(t,law):
     """
     This function initializes the batman code.
@@ -32,6 +127,17 @@ def init_batman(t,law):
     params.limb_dark = law
     m = batman.TransitModel(params,t)
     return params,m
+
+def get_transit_model(t,t0,P,p,a,inc,q1,q2,ld_law):
+    params,m = init_batman(t,law=ld_law)
+    coeff1,coeff2 = reverse_ld_coeffs(ld_law, q1, q2)
+    params.t0 = t0
+    params.per = P
+    params.rp = p
+    params.a = a
+    params.inc = inc
+    params.u = [coeff1,coeff2]
+    return m.light_curve(params)
 
 def convert_ld_coeffs(ld_law, coeff1, coeff2):
     if ld_law == 'quadratic':
@@ -61,7 +167,7 @@ import emcee
 import Wavelets
 import scipy.optimize as op
 def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
-                       theta_0, sigma_theta_0, ld_law, mode, rv_jitter = False, \
+                       priors, ld_law, mode, rv_jitter = False, \
                        njumps = 500, nburnin = 500, nwalkers = 100, noise_model = 'white'):
     """
     This function performs an MCMC fitting procedure using a transit model 
@@ -91,42 +197,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
       rv_err:           If you have errors on the RVs, put them here. Otherwise, set 
                         this to None.
 
-      theta_input_0:    Array with the priors on the parameters to be fitted. They are 
-                        assumed to be in the following order in 'full' mode :
- 
-                      theta_input_0 = [P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K,sigma_w_rv]
-
-                        The parameter sigma_r only has to be included if noise_model = '1/f' 
-                        (see below). Here:
-
-                          P:            Period (in the units of the times).
-
-                          inc:          Inclination of the orbit (in degrees).
-
-                          a:            Semi-major axis in stellar units.
-
-                          p:            Planet-to-star radius ratio.
-
-                          t0:           Time of transit center (same units as the times)
-
-                          q1:           Prior on the first converted coefficient of whatever law you 
-                                        are going to use for the limb-darkening (see Kipping 2013).
-
-                          q2:           Same thing for the second coefficient.
-
-                          sigma_w:      Standard deviation of the underlying white-noise process.
- 
-                          sigma_r:      Parameter of the 1/f noise process (used only if noise_model
-                                        set to 1/f; see below).
-
-                          mu:           Mean RVs.
-
-                          K:            RV semi-amplitude.
-
-                          sigma_w_Rv:   RV jitter (if rv_jitter = True)
-
-      sigma_theta_0:    Array with the standard-deviations of the priors stated above,
-                        in the same order as the parameters.
+      priors:           Dictionary containing the information regarding the priors.
 
       ld_law:           Two-coefficient limb-darkening law to be used. Can be 'quadratic',
                         'logarithmic', 'square-root' or 'exponential'. The last one is not 
@@ -156,6 +227,29 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
     if mode != 'rv':
         # Initialize the parameters:
         params,m = init_batman(times,law=ld_law)
+
+    # Define parameters that could enter in each analysis:
+    transit_params = ['P','t0','a','p','inc','sigma_w','sigma_r','q1','q2']
+    rv_params = ['mu','K','sigma_w_rv']
+
+    # First, fix the parameters that must be fixed and 
+    # define for which parameters we have to check the 
+    # limits on in order to make the posterior go to infinity. 
+    # Also, put all the parameters that are going to be sampled 
+    # in one array:
+    parameters_to_check = []
+    all_mcmc_params = []
+    for parameter in priors.keys():
+        if (mode == 'transit' and parameter in transit_params) or 
+           (mode == 'rv' and parameter in rv_params) or 
+           (mode == 'full' and ((parameter in rv_params) or (parameter in transit_params))):
+            if priors[parameter]['type'] in ['Uniform','Jeffreys']:
+                parameters_to_check.append(parameter)
+                all_mcmc_params.append(parameter)
+            elif priors[parameter]['type'] == 'FIXED':
+                exec parameter+'='+priors[parameter]['hyperparams'][0]
+            else:
+                all_mcmc_params.append(parameter)
 
     def get_fn_likelihood(residuals, sigma_w, sigma_r, gamma=1.0):
         like=0.0
@@ -283,7 +377,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                 P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K,sigma_w_rv = theta
                 if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0 or sigma_r < 1.0 \
                     or p < 0 or p>1 or P < 0 or inc<0 or inc>90.0 or sigma_w_rv<0 \
-                    or a<1:
+                    or a<1 or K<0:
                     return -np.inf
 
                 P_0,inc_0,a_0,p_0,t0_0,q1_0,q2_0,sigma_w_0,sigma_r_0,mu_0,K_0,sigma_w_rv_0 = theta_0
@@ -299,7 +393,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                 P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K = theta
                 if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0 or sigma_r < 1.0 \
                     or p < 0 or p>1 or P < 0 or inc<0 or inc>90.0 \
-                    or a<1:
+                    or a<1 or K<0:
                     return -np.inf
             
                 P_0,inc_0,a_0,p_0,t0_0,q1_0,q2_0,sigma_w_0,sigma_r_0,mu_0,K_0 = theta_0
@@ -317,7 +411,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                 P,inc,a,p,t0,q1,q2,sigma_w,mu,K,sigma_w_rv = theta
                 if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0\
                     or p < 0 or p>1 or P < 0 or inc<0 or inc>90.0 or sigma_w_rv<0 \
-                    or a<1:
+                    or a<1 or K<0:
                     return -np.inf
 
                 P_0,inc_0,a_0,p_0,t0_0,q1_0,q2_0,sigma_w_0,mu_0,K_0,sigma_w_rv_0 = theta_0
@@ -331,7 +425,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                 P,inc,a,p,t0,q1,q2,sigma_w,mu,K = theta
                 if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0\
                     or p < 0 or p>1 or P < 0 or inc<0 or inc>90.0 \
-                    or a<1:
+                    or a<1 or K<0:
                     return -np.inf
 
                 P_0,inc_0,a_0,p_0,t0_0,q1_0,q2_0,sigma_w_0,mu_0,K_0 = theta_0
@@ -370,6 +464,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         return lp + lnlike_full(theta, xt, yt, yerrt, xrv, yrv, yerrrv)
 
     if mode == 'full':
+        # Prepare the data:
         xt = times.astype('float64')
         yt = relative_flux.astype('float64')
         if error is None:
@@ -384,11 +479,12 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         else:
             yerrrv = rv_err.astype('float64')
 
+        # Define the posterior to use:
         lnprob = lnprob_full 
 
         # Start at the maximum likelihood value:
         nll = lambda *args: -lnprob_full(*args)
-        result = op.minimize(nll, theta_0, args=(xt, yt, yerrt, xrv, yrv, yerrrv))
+        result = op.minimize(nll, priors, args=(xt, yt, yerrt, xrv, yrv, yerrrv))
         theta_ml = result["x"]
 
         # Now define parameters for emcee:
@@ -542,7 +638,7 @@ def plot_transit(t,f,theta,ld_law):
     idx = np.argsort(model_phase)
     plt.plot(phases,f,'.',color='black',alpha=0.4)
     plt.plot(model_phase[idx],model_lc[idx])
-    plt.plot(phases,f-model_pred+(1-1.2*(p**2)),'.',color='black',alpha=0.4)
+    plt.plot(phases,f-model_pred+(1-1.4*(p**2)),'.',color='black',alpha=0.4)
     plt.show()
 
 def plot_transit_and_rv(t,f,trv,rv,rv_err,theta,ld_law,rv_jitter):
@@ -590,7 +686,7 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,theta,ld_law,rv_jitter):
     idx = np.argsort(model_phase)
     plt.plot(phases,f,'.',color='black',alpha=0.4)
     plt.plot(model_phase[idx],model_lc[idx])
-    plt.plot(phases,f-model_pred+(1-1.2*(p**2)),'.',color='black',alpha=0.4)
+    plt.plot(phases,f-model_pred+(1-1.4*(p**2)),'.',color='black',alpha=0.4)
 
     plt.subplot(212)
     plt.ylabel('Radial velocity (m/s)')
