@@ -51,6 +51,7 @@ theta_out = transit_utils.exonailer_mcmc_fit(t, f, f_err, t_rv, rv, rv_err, \
                                              priors, ld_law, mode, rv_jitter = rv_jitter, \
                                              njumps=500, nburnin = 500, \
                                              nwalkers = 100,  noise_model = phot_noise_model)
+
 for chain_var in theta_out:
     print np.median(chain_var),'+-',np.sqrt(np.var(chain_var))
 

@@ -17,7 +17,7 @@ def get_phases(t,P,t0):
     return phase
 
 def read_transit_params(prior_dict):
-    names = ['Period','inc','a','p','t0','q1','q2']
+    names = ['P','inc','a','p','t0','q1','q2']
     vals = len(names)*[[]]
     for i in range(len(names)):
         param = prior_dict[names[i]]
@@ -160,7 +160,7 @@ def reverse_ld_coeffs(ld_law, q1, q2):
         coeff2 = 2.*np.sqrt(q1)*q2
     elif ld_law=='logarithmic':
         coeff1 = 1.-np.sqrt(q1)*q2
-        coeff2 = 1.-np.sqrt(q1)#(1.-coeff1)/(1.-coeff2.)
+        coeff2 = 1.-np.sqrt(q1)
     return coeff1,coeff2
 
 import emcee
@@ -250,6 +250,8 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                 exec parameter+'='+priors[parameter]['hyperparams'][0]
             else:
                 all_mcmc_params.append(parameter)
+
+    # Generate theta_0 and sigma_theta_0:
 
     def get_fn_likelihood(residuals, sigma_w, sigma_r, gamma=1.0):
         like=0.0
