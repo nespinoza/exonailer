@@ -21,14 +21,7 @@ def read_transit_params(prior_dict):
     vals = len(names)*[[]]
     for i in range(len(names)):
         param = prior_dict[names[i]]
-        if param['type'] == 'Normal':
-                vals[i] = param['hyperparams'][0]
-        elif param['type'] == 'Uniform':
-                vals[i] = np.mean(param['hyperparams'])
-        elif param['type'] == 'Jeffreys':
-                vals[i] = np.sqrt(param['hyperparams'][0]*param['hyperparams'][1])
-        elif param['type'] == 'FIXED':
-                vals[i] = param['hyperparams']
+        vals[i] = param['object'].value
     return vals
 
 def pre_process(t,f,f_err,detrend,get_outliers,n_ommit,window,parameters,ld_law):
@@ -234,7 +227,8 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
 
     # First, fix the parameters that must be fixed and 
     # define for which parameters we have to check the 
-    # limits on in order to make the posterior go to infinity. 
+    # limits on in order to make the posterior go to infinity if 
+    # sampled values are outside these limits.
     # Also, put all the parameters that are going to be sampled 
     # in one array:
     parameters_to_check = []
@@ -251,7 +245,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
             else:
                 all_mcmc_params.append(parameter)
 
-    # Generate theta_0 and sigma_theta_0:
+    # Generate the parameter extraction commands for theta and theta_0:
 
     def get_fn_likelihood(residuals, sigma_w, sigma_r, gamma=1.0):
         like=0.0
@@ -486,7 +480,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
 
         # Start at the maximum likelihood value:
         nll = lambda *args: -lnprob_full(*args)
-        result = op.minimize(nll, priors, args=(xt, yt, yerrt, xrv, yrv, yerrrv))
+        result = op.minimize(nll, args=(xt, yt, yerrt, xrv, yrv, yerrrv))
         theta_ml = result["x"]
 
         # Now define parameters for emcee:
