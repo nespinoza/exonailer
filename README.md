@@ -98,7 +98,7 @@ The priors currently supported by the code are:
                     where low is the lower limit of the variable and up is the upper 
                     limit of the variable.
 
-    Fixed:          This assumes you are giving the fixed value of the variable in 
+    FIXED:          This assumes you are giving the fixed value of the variable in 
                     the third column.
 
 The mandatory variables that must have some of the above defined priors are:
