@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from math import floor,ceil
 import matplotlib.pyplot as plt
 import numpy as np
 import batman
@@ -218,34 +219,86 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
     """
 
     if mode != 'rv':
-        # Initialize the parameters:
+        # Initialize the parameters of the transit model:
         params,m = init_batman(times,law=ld_law)
 
-    # Define parameters that could enter in each analysis:
+    # Initialize the variable names:
     transit_params = ['P','t0','a','p','inc','sigma_w','sigma_r','q1','q2']
     rv_params = ['mu','K','sigma_w_rv']
 
-    # First, fix the parameters that must be fixed and 
-    # define for which parameters we have to check the 
-    # limits on in order to make the posterior go to infinity if 
-    # sampled values are outside these limits.
-    # Also, put all the parameters that are going to be sampled 
-    # in one array:
+    # Create lists that will save parameters to check the limits on and:
     parameters_to_check = []
-    all_mcmc_params = []
-    for parameter in priors.keys():
-        if (mode == 'transit' and parameter in transit_params) or 
-           (mode == 'rv' and parameter in rv_params) or 
-           (mode == 'full' and ((parameter in rv_params) or (parameter in transit_params))):
-            if priors[parameter]['type'] in ['Uniform','Jeffreys']:
-                parameters_to_check.append(parameter)
-                all_mcmc_params.append(parameter)
-            elif priors[parameter]['type'] == 'FIXED':
-                exec parameter+'='+priors[parameter]['hyperparams'][0]
-            else:
-                all_mcmc_params.append(parameter)
 
-    # Generate the parameter extraction commands for theta and theta_0:
+    # Initialize parameters; set to user-defined values variables that are fixed:
+    if priors['P']['type'] == 'FIXED':
+        P = priors['P']['object'].value
+        transit_params.pop(transit_params.index('P'))
+    elif priors['P']['type'] in ['Uniform','Jeffreys']:
+        parameters_to_check.append('P')
+    if priors['t0']['type'] == 'FIXED':
+        t0 = priors['t0']['object'].value
+        transit_params.pop(transit_params.index('t0'))
+    elif priors['t0']['type'] in ['Uniform','Jeffreys']:
+        parameters_to_check.append('t0')
+    if priors['a']['type'] == 'FIXED':
+        a = priors['a']['object'].value
+        transit_params.pop(transit_params.index('a'))
+    elif priors['a']['type'] in ['Uniform','Jeffreys']:
+        parameters_to_check.append('a')
+    if priors['p']['type'] == 'FIXED':
+        p = priors['p']['object'].value
+        transit_params.pop(transit_params.index('p'))
+    elif priors['p']['type'] in ['Uniform','Jeffreys']:
+        parameters_to_check.append('p')
+    if priors['inc']['type'] == 'FIXED':
+        inc = priors['inc']['object'].value
+        transit_params.pop(transit_params.index('inc'))
+    elif priors['inc']['type'] in ['Uniform','Jeffreys']:
+        parameters_to_check.append('inc')
+    if priors['sigma_w']['type'] == 'FIXED':
+        sigma_w = priors['sigma_w']['object'].value
+        transit_params.pop(transit_params.index('sigma_w'))
+    elif priors['sigma_w']['type'] in ['Uniform','Jeffreys']:
+        parameters_to_check.append('sigma_w')
+    if priors['q1']['type'] == 'FIXED':
+        q1 = priors['q1']['object'].value
+        transit_params.pop(transit_params.index('q1'))
+    elif priors['q1']['type'] in ['Uniform','Jeffreys']:
+        parameters_to_check.append('q1')
+    if priors['q2']['type'] == 'FIXED':
+        q2 = priors['q2']['object'].value
+        transit_params.pop(transit_params.index('q2'))
+    elif priors['q2']['type'] in ['Uniform','Jeffreys']:
+        parameters_to_check.append('q2')
+    if priors['mu']['type'] == 'FIXED':
+        mu = priors['mu']['object'].value
+        rv_params.pop(rv_params.index('mu'))
+    elif priors['mu']['type'] in ['Uniform','Jeffreys']:
+        parameters_to_check.append('mu')
+    if priors['K']['type'] == 'FIXED':
+        K = priors['K']['object'].value
+        rv_params.pop(rv_params.index('K'))
+    elif priors['K']['type'] in ['Uniform','Jeffreys']:
+        parameters_to_check.append('K')
+    if noise_model == '1/f':
+        if priors['sigma_r']['type'] == 'FIXED':
+            sigma_r = priors['sigma_r']['object'].value
+            transit_params.pop(transit_params.index('sigma_r'))
+        elif priors['sigma_r']['type'] in ['Uniform','Jeffreys']:
+            parameters_to_check.append('sigma_r')
+    else:
+        transit_params.pop(transit_params.index('sigma_r'))
+    if mode != 'transit' and rv_jitter:
+        if priors['sigma_w_rv']['type'] == 'FIXED':
+            sigma_w_rv = priors['sigma_w_rv']['object'].value 
+            rv_params.pop(rv_params.index('sigma_w_rv'))       
+        elif priors['sigma_w_rv']['type'] in ['Uniform','Jeffreys']:
+            parameters_to_check.append('sigma_w_rv')
+    else: 
+        sigma_w_rv = 0.0 
+        rv_params.pop(rv_params.index('sigma_w_rv'))
+
+    all_mcmc_params = transit_params + rv_params
 
     def get_fn_likelihood(residuals, sigma_w, sigma_r, gamma=1.0):
         like=0.0
@@ -310,21 +363,11 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
 
     def lnlike_full(theta, tt, yt, yerrt, trv, yrv, yerrrv):
         if noise_model == '1/f':
-            if rv_jitter:
-               P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K,sigma_w_rv = theta
-            else:
-               P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K = theta
-               sigma_w_rv = 0
-
+            exec read_line_full in globals(),locals()    
             return lnlike_rv([mu,K,P,t0,sigma_w_rv], trv, yrv, yerrrv) + \
                    lnlike_transit([P,inc,a,p,t0,q1,q2,sigma_w,sigma_r], tt, yt, yerrt)
         else:
-            if rv_jitter:
-                P,inc,a,p,t0,q1,q2,sigma_w,mu,K,sigma_w_rv = theta
-            else:
-                P,inc,a,p,t0,q1,q2,sigma_w,mu,K = theta
-                sigma_w_rv = 0.
-
+            exec read_line_full in globals(),locals()
             return lnlike_rv([mu,K,P,t0,sigma_w_rv], trv, yrv, yerrrv) + \
                    lnlike_transit([P,inc,a,p,t0,q1,q2,sigma_w], tt, yt, yerrt)
 
@@ -370,7 +413,9 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
     def lnprior_full(theta):
         if noise_model == '1/f':
             if rv_jitter:
-                P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K,sigma_w_rv = theta
+                exec read_line_full in globals(),locals()
+                for parameter in parameters_to_check:
+                    if prior[parameter]['object'].check_value
                 if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0 or sigma_r < 1.0 \
                     or p < 0 or p>1 or P < 0 or inc<0 or inc>90.0 or sigma_w_rv<0 \
                     or a<1 or K<0:
@@ -386,7 +431,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                 lnp_sigma_rv = -np.log((sigma_w_rv)*np.log(up_lim_sigma_w_rv))
 
             else:
-                P,inc,a,p,t0,q1,q2,sigma_w,sigma_r,mu,K = theta
+                exec read_line_full in globals(),locals()
                 if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0 or sigma_r < 1.0 \
                     or p < 0 or p>1 or P < 0 or inc<0 or inc>90.0 \
                     or a<1 or K<0:
@@ -399,12 +444,10 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                 if sigma_w > up_lim_sigma_w or sigma_r > up_lim_sigma_r:
                     return -np.inf
 
-                lnp_sigma_rv = 0
-
             lnp_sigma_r = -np.log((sigma_r)*np.log((up_lim_sigma_r)))
         else:
             if rv_jitter:
-                P,inc,a,p,t0,q1,q2,sigma_w,mu,K,sigma_w_rv = theta
+                exec read_line_full in globals(),locals()
                 if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0\
                     or p < 0 or p>1 or P < 0 or inc<0 or inc>90.0 or sigma_w_rv<0 \
                     or a<1 or K<0:
@@ -418,7 +461,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                     return -np.inf
                 lnp_sigma_rv = -np.log((sigma_w_rv)*np.log(up_lim_sigma_w_rv))
             else:
-                P,inc,a,p,t0,q1,q2,sigma_w,mu,K = theta
+                exec read_line_full in globals(),locals()
                 if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0\
                     or p < 0 or p>1 or P < 0 or inc<0 or inc>90.0 \
                     or a<1 or K<0:

@@ -92,6 +92,9 @@ class normal_parameter:
           return np.log(1./np.sqrt(2.*np.pi*(prior_hypp[1]**2)))-\
                  0.5*(((self.prior_hypp[0]-x)**2/(self.prior_hypp[1]**2)))
 
+      def set_value(self,new_val):
+          self.value = new_val
+
 class uniform_parameter:
       """
       Description
@@ -108,6 +111,15 @@ class uniform_parameter:
 
       def get_ln_prior(self,x):
           return np.log(1./(prior_hypp[1]-self.prior_hypp[0]))
+
+      def check_value(self,x):
+          if x > self.prior_hypp[0] and  x < self.prior_hypp[1]:
+              return True
+          else:
+              return False  
+ 
+      def set_value(self,new_val):
+          self.value = new_val
 
 log1 = np.log(1)
 class jeffreys_parameter:
@@ -126,6 +138,15 @@ class jeffreys_parameter:
 
       def get_ln_prior(self,x):
           return log1 - np.log(x*np.log(self.prior_hypp[1]/self.prior_hypp[0]))
+
+      def check_value(self,x):
+          if x > self.prior_hypp[0] and  x < self.prior_hypp[1]:
+              return True
+          else:
+              return False
+
+      def set_value(self,new_val):
+          self.value = new_val
 
 class constant_parameter:
       """

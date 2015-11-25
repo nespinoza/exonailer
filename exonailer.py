@@ -5,8 +5,6 @@ import transit_utils
 import general_utils
 import numpy as np
 
-from math import floor,ceil
-
 ################# OPTIONS ######################
 
 # Define the target name, detrending method and parameters of it:
@@ -45,7 +43,6 @@ if mode != 'rvs':
     t,phases,f, f_err = transit_utils.pre_process(t,f,f_err,phot_detrend,\
                                                   phot_get_outliers,n_ommit,\
                                                   window,priors,ld_law)
-
 # Run the MCMC:
 theta_out = transit_utils.exonailer_mcmc_fit(t, f, f_err, t_rv, rv, rv_err, \
                                              priors, ld_law, mode, rv_jitter = rv_jitter, \
