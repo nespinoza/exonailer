@@ -229,60 +229,49 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
     # Create lists that will save parameters to check the limits on and:
     parameters_to_check = []
 
-    # Initialize parameters; set to user-defined values variables that are fixed:
+    # Eliminate from the parameter list parameters that are being fixed:
     if priors['P']['type'] == 'FIXED':
-        P = priors['P']['object'].value
         transit_params.pop(transit_params.index('P'))
     elif priors['P']['type'] in ['Uniform','Jeffreys']:
         parameters_to_check.append('P')
     if priors['t0']['type'] == 'FIXED':
-        t0 = priors['t0']['object'].value
         transit_params.pop(transit_params.index('t0'))
     elif priors['t0']['type'] in ['Uniform','Jeffreys']:
         parameters_to_check.append('t0')
     if priors['a']['type'] == 'FIXED':
-        a = priors['a']['object'].value
         transit_params.pop(transit_params.index('a'))
     elif priors['a']['type'] in ['Uniform','Jeffreys']:
         parameters_to_check.append('a')
     if priors['p']['type'] == 'FIXED':
-        p = priors['p']['object'].value
         transit_params.pop(transit_params.index('p'))
     elif priors['p']['type'] in ['Uniform','Jeffreys']:
         parameters_to_check.append('p')
     if priors['inc']['type'] == 'FIXED':
-        inc = priors['inc']['object'].value
         transit_params.pop(transit_params.index('inc'))
     elif priors['inc']['type'] in ['Uniform','Jeffreys']:
         parameters_to_check.append('inc')
     if priors['sigma_w']['type'] == 'FIXED':
-        sigma_w = priors['sigma_w']['object'].value
         transit_params.pop(transit_params.index('sigma_w'))
     elif priors['sigma_w']['type'] in ['Uniform','Jeffreys']:
         parameters_to_check.append('sigma_w')
     if priors['q1']['type'] == 'FIXED':
-        q1 = priors['q1']['object'].value
         transit_params.pop(transit_params.index('q1'))
     elif priors['q1']['type'] in ['Uniform','Jeffreys']:
         parameters_to_check.append('q1')
     if priors['q2']['type'] == 'FIXED':
-        q2 = priors['q2']['object'].value
         transit_params.pop(transit_params.index('q2'))
     elif priors['q2']['type'] in ['Uniform','Jeffreys']:
         parameters_to_check.append('q2')
     if priors['mu']['type'] == 'FIXED':
-        mu = priors['mu']['object'].value
         rv_params.pop(rv_params.index('mu'))
     elif priors['mu']['type'] in ['Uniform','Jeffreys']:
         parameters_to_check.append('mu')
     if priors['K']['type'] == 'FIXED':
-        K = priors['K']['object'].value
         rv_params.pop(rv_params.index('K'))
     elif priors['K']['type'] in ['Uniform','Jeffreys']:
         parameters_to_check.append('K')
     if noise_model == '1/f':
         if priors['sigma_r']['type'] == 'FIXED':
-            sigma_r = priors['sigma_r']['object'].value
             transit_params.pop(transit_params.index('sigma_r'))
         elif priors['sigma_r']['type'] in ['Uniform','Jeffreys']:
             parameters_to_check.append('sigma_r')
@@ -290,7 +279,6 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         transit_params.pop(transit_params.index('sigma_r'))
     if mode != 'transit' and rv_jitter:
         if priors['sigma_w_rv']['type'] == 'FIXED':
-            sigma_w_rv = priors['sigma_w_rv']['object'].value 
             rv_params.pop(rv_params.index('sigma_w_rv'))       
         elif priors['sigma_w_rv']['type'] in ['Uniform','Jeffreys']:
             parameters_to_check.append('sigma_w_rv')
@@ -299,6 +287,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         rv_params.pop(rv_params.index('sigma_w_rv'))
 
     all_mcmc_params = transit_params + rv_params
+    n_params = len(all_mcmc_params)
 
     def get_fn_likelihood(residuals, sigma_w, sigma_r, gamma=1.0):
         like=0.0
@@ -411,9 +400,17 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         return lnp_sigma + lnp_sigma_r + lnp_inc + lnp_a + lnp_p + lnp_t0 + lnp_P
 
     def lnprior_full(theta):
+
         if noise_model == '1/f':
             if rv_jitter:
-                exec read_line_full in globals(),locals()
+                for i in range(n_params):
+                    c_param = all_mcmc_params[i]
+                    if c_param in parameters_to_check:
+                        if not priors[c_param]['object'].check_value(theta[i]):
+                            return -np.inf
+                    priors[c_param]['object'].set_value(theta[i])
+                    
+
                 for parameter in parameters_to_check:
                     if prior[parameter]['object'].check_value
                 if q1 < 0 or q1 > 1 or q2 < 0 or q2 > 1 or sigma_w < 1.0 or sigma_r < 1.0 \
@@ -523,7 +520,14 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
 
         # Start at the maximum likelihood value:
         nll = lambda *args: -lnprob_full(*args)
-        result = op.minimize(nll, args=(xt, yt, yerrt, xrv, yrv, yerrrv))
+
+        # Extract initial input values of the parameters to be fitted:
+        theta_0 = []
+        for i in range(n_params):
+            theta_0.append(priors[all_mcmc_params[i]]['object'].value)
+
+        # Get ML estimate:
+        result = op.minimize(nll, theta_0, args=(xt, yt, yerrt, xrv, yrv, yerrrv))
         theta_ml = result["x"]
 
         # Now define parameters for emcee:
