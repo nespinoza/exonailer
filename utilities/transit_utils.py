@@ -217,7 +217,6 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
     The outputs are the chains of each of the parameters in the theta_0 array in the same 
     order as they were inputted. This includes the sampled parameters from all the walkers.
     """
-
     # If mode is not RV:
     if mode != 'rv':
         # Initialize the parameters of the transit model:
@@ -400,7 +399,6 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         # Extract initial input values of the parameters to be fitted:
         theta_0 = []
         for i in range(n_params):
-            print all_mcmc_params[i],parameters[all_mcmc_params[i]]['object'].value
             theta_0.append(parameters[all_mcmc_params[i]]['object'].value)
 
         # Get ML estimate:
