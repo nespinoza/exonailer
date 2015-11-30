@@ -506,7 +506,7 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter):
     idx = np.argsort(model_phase)
     plt.plot(phases,f,'.',color='black',alpha=0.4)
     plt.plot(model_phase[idx],model_lc[idx])
-    plt.plot(phases,f-model_pred+(1-1.4*(p**2)),'.',color='black',alpha=0.4)
+    plt.plot(phases,f-model_pred+(1-1.8*(p**2)),'.',color='black',alpha=0.4)
 
     plt.subplot(212)
     plt.ylabel('Radial velocity (m/s)')
