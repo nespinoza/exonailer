@@ -360,10 +360,10 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         total_prior = 0.0
         for i in range(n_params):
             c_param = all_mcmc_params[i]
+            parameters[c_param]['object'].set_value(theta[i])
             if c_param in parameters_to_check:
                 if not parameters[c_param]['object'].check_value(theta[i]):
                     return -np.inf
-                parameters[c_param]['object'].set_value(theta[i])
             total_prior += parameters[c_param]['object'].get_ln_prior()
 
         return total_prior
@@ -399,6 +399,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         # Extract initial input values of the parameters to be fitted:
         theta_0 = []
         for i in range(n_params):
+            print all_mcmc_params[i],parameters[all_mcmc_params[i]]['object'].value
             theta_0.append(parameters[all_mcmc_params[i]]['object'].value)
 
         # Get ML estimate:
@@ -419,23 +420,22 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
             c_param = all_mcmc_params[i]
             c_p_chain = np.array([])
             for walker in range(nwalkers):
-                c_p_chain = np.append(c_p_chain,sampler.chain[walker,nburnin:,0])
+                c_p_chain = np.append(c_p_chain,sampler.chain[walker,nburnin:,i])
             parameters[c_param]['object'].set_posterior(np.copy(c_p_chain))
-
-    print 'Mode not supported. Doing nothing.'
+    else:
+        print 'Mode not supported. Doing nothing.'
 
 import matplotlib.pyplot as plt
-def plot_transit(t,f,theta,ld_law):
+def plot_transit(t,f,parameters,ld_law):
         
     # Extract transit parameters:
-    P_c,inc_c,a_c,p_c,t0_c,q1_c,q2_c,sigma_w_c = theta
-    P = np.median(P_c)
-    inc = np.median(inc_c)
-    a = np.median(a_c)
-    p = np.median(p_c)
-    t0 = np.median(t0_c)
-    q1 = np.median(q1_c)
-    q2 = np.median(q2_c)
+    P = parameters['P']['object'].value
+    inc = parameters['inc']['object'].value
+    a = parameters['a']['object'].value
+    p = parameters['p']['object'].value
+    t0 = parameters['t0']['object'].value
+    q1 = parameters['q1']['object'].value
+    q2 = parameters['q2']['object'].value
 
     # Get data phases:
     phases = get_phases(t,P,t0)
@@ -467,22 +467,17 @@ def plot_transit(t,f,theta,ld_law):
     plt.plot(phases,f-model_pred+(1-1.4*(p**2)),'.',color='black',alpha=0.4)
     plt.show()
 
-def plot_transit_and_rv(t,f,trv,rv,rv_err,theta,ld_law,rv_jitter):
+def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter):
     # Extract parameters:
-    if rv_jitter:
-        P_c,inc_c,a_c,p_c,t0_c,q1_c,q2_c,sigma_w_c,mu_c,K_c,sigma_w_rv_c = theta
-
-    else:
-        P_c,inc_c,a_c,p_c,t0_c,q1_c,q2_c,sigma_w_c,mu_c,K_c = theta
-    P = np.median(P_c)
-    inc = np.median(inc_c)
-    a = np.median(a_c)
-    p = np.median(p_c)
-    t0 = np.median(t0_c)
-    q1 = np.median(q1_c)
-    q2 = np.median(q2_c)
-    mu = np.median(mu_c)
-    K = np.median(K_c)
+    P = parameters['P']['object'].value
+    inc = parameters['inc']['object'].value
+    a = parameters['a']['object'].value
+    p = parameters['p']['object'].value
+    t0 = parameters['t0']['object'].value
+    q1 = parameters['q1']['object'].value
+    q2 = parameters['q2']['object'].value
+    mu = parameters['mu']['object'].value
+    K = parameters['K']['object'].value
 
     # Get data phases:
     phases = get_phases(t,P,t0)
@@ -521,6 +516,4 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,theta,ld_law,rv_jitter):
     rv_phases = get_phases(trv,P,t0)
     plt.errorbar(rv_phases,(rv-mu)*1e3,yerr=rv_err*1e3,fmt='o')
     plt.plot(model_phase[idx],(model_rv[idx]-mu)*1e3)
-    plt.show()
-    plt.hist(K_c,bins = 500)
     plt.show()

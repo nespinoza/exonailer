@@ -85,6 +85,8 @@ class normal_parameter:
       """   
       def __init__(self,prior_hypp):
           self.value = prior_hypp[0]
+          self_value_u = 0.0
+          self_value_l = 0.0
           self.prior_hypp = prior_hypp
           self.posterior = []
 
@@ -97,7 +99,10 @@ class normal_parameter:
 
       def set_posterior(self,posterior_chain):
           self.posterior = posterior_chain
-
+          param, param_u, param_l = get_quantiles(posterior_chain)
+          self.value = param
+          self.value_u = param_u
+          self.value_l = param_l
 class uniform_parameter:
       """
       Description
@@ -109,6 +114,8 @@ class uniform_parameter:
       """
       def __init__(self,prior_hypp):
           self.value = (prior_hypp[0]+prior_hypp[1])/2.
+          self_value_u = 0.0
+          self_value_l = 0.0
           self.prior_hypp = prior_hypp
           self.posterior = []
 
@@ -126,6 +133,10 @@ class uniform_parameter:
 
       def set_posterior(self,posterior_chain):
           self.posterior = posterior_chain
+          param, param_u, param_l = get_quantiles(posterior_chain)
+          self.value = param
+          self.value_u = param_u
+          self.value_l = param_l
 
 log1 = np.log(1)
 class jeffreys_parameter:
@@ -139,6 +150,8 @@ class jeffreys_parameter:
       """
       def __init__(self,prior_hypp):
           self.value = np.sqrt(prior_hypp[0]*prior_hypp[1])
+          self_value_u = 0.0
+          self_value_l = 0.0
           self.prior_hypp = prior_hypp
           self.posterior = []
 
@@ -156,6 +169,10 @@ class jeffreys_parameter:
 
       def set_posterior(self,posterior_chain):
           self.posterior = posterior_chain
+          param, param_u, param_l = get_quantiles(posterior_chain)
+          self.value = param
+          self.value_u = param_u
+          self.value_l = param_l
 
 class constant_parameter:
       """
