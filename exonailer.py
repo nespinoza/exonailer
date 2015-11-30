@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import sys
 sys.path.append('utilities')
+import os
 import transit_utils
 import general_utils
 import numpy as np
@@ -44,11 +45,21 @@ if mode != 'rvs':
                                                   phot_get_outliers,n_ommit,\
                                                   window,parameters,ld_law)
 
-# Run the MCMC:
-transit_utils.exonailer_mcmc_fit(t, f, f_err, t_rv, rv, rv_err, \
-                                 parameters, ld_law, mode, rv_jitter = rv_jitter, \
-                                 njumps=5000, nburnin = 5000, \
-                                 nwalkers = 100,  noise_model = phot_noise_model)
+# Create results folder if not already created:
+if not os.path.exists('results'):
+    os.mkdir('results')
+
+# If chains not ran, run the MCMC and save results:
+if not os.path.exists('results/'+target+'_'+mode+'_'+phot_noise_model+'_'+ld_law):
+    transit_utils.exonailer_mcmc_fit(t, f, f_err, t_rv, rv, rv_err, \
+                                     parameters, ld_law, mode, rv_jitter = rv_jitter, \
+                                     njumps=1000, nburnin = 2000, \
+                                     nwalkers = 100,  noise_model = phot_noise_model)
+
+    general_utils.save_results(target,mode,phot_noise_model,ld_law,parameters)
+
+else:
+    parameters = general_utils.read_results(target,mode,phot_noise_model,ld_law)
 # Get plot of the transit-fit:
 if mode == 'transit':
     transit_utils.plot_transit(t,f,parameters,ld_law)

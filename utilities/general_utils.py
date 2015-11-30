@@ -1,8 +1,11 @@
 import numpy as np
 
-def read_priors(target):
+def read_priors(target,filename = None):
     # Open the file containing the priors:
-    f = open('priors_data/'+target+'_priors.dat','r')
+    if filename is None:
+        f = open('priors_data/'+target+'_priors.dat','r')
+    else:
+        f = open(filename)
     # Generate dictionary that will save the data on the priors:
     priors = {}
     while True:
@@ -39,6 +42,47 @@ def read_data(target,mode):
             t_rv,rv = np.loadtxt('rv_data/'+target+'_rvs.dat',unpack=True,usecols=(0,1))
         
     return t,f,f_err,t_rv,rv,rv_err
+
+import pickle,os
+def save_results(target,mode,phot_noise_model,ld_law,parameters):
+    out_dir = 'results/'+target+'_'+mode+'_'+phot_noise_model+'_'+ld_law+'/'
+    os.mkdir(out_dir)
+    # Copy used prior file to the results folder:
+    os.system('cp priors_data/'+target+'_priors.dat '+out_dir+'priors.dat')
+    out_posterior_file = open(out_dir+'posterior_parameters.dat','w')
+    out_posterior_file.write('# This file has the final parameters obtained from the MCMC chains.\n')
+
+    # Generate an output dictionary with the posteriors:
+    out_dict = {}
+    for parameter in parameters.keys():
+        if parameters[parameter]['type'] != 'FIXED':
+            # Save parameter values in posterior file:
+            param = parameters[parameter]['object'].value
+            up_error = parameters[parameter]['object'].value_u-param
+            low_error = param-parameters[parameter]['object'].value_l
+            out_dict[parameter] = parameters[parameter]['object'].posterior
+        else:
+            param = parameters[parameter]['object'].value
+            up_error = 0
+            low_error = 0
+
+        out_posterior_file.write('{0:10}  {1:10.10f}  {2:10.10f}  {3:10.10f}\n'.format(\
+                                   parameter, param, up_error, low_error))
+    # Save posterior dict:
+    f = open(out_dir+'posteriors.pkl','w')
+    pickle.dump(out_dict,f)
+    f.close()
+
+def read_results(target,mode,phot_noise_model,ld_law):
+    out_dir = 'results/'+target+'_'+mode+'_'+phot_noise_model+'_'+ld_law+'/'
+    parameters = read_priors(target,filename = out_dir+'priors.dat')
+    thefile = open(out_dir+'posteriors.pkl','r')
+    posteriors = pickle.load(thefile)
+    for parameter in parameters.keys():
+        if parameters[parameter]['type'] != 'FIXED':
+            parameters[parameter]['object'].set_posterior(posteriors[parameter])  
+    thefile.close()
+    return parameters
 
 def get_quantiles(dist,alpha = 0.68, method = 'median'):
     """
