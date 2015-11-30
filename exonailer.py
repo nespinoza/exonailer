@@ -45,14 +45,10 @@ if mode != 'rvs':
                                                   window,parameters,ld_law)
 
 # Run the MCMC:
-import time
-tic = time.time()
 transit_utils.exonailer_mcmc_fit(t, f, f_err, t_rv, rv, rv_err, \
                                  parameters, ld_law, mode, rv_jitter = rv_jitter, \
                                  njumps=5000, nburnin = 5000, \
                                  nwalkers = 100,  noise_model = phot_noise_model)
-toc = time.time()
-print 'Took',toc-tic,' seconds to do 5000 jumps, 5000 burnins with 100 walkers.'
 # Get plot of the transit-fit:
 if mode == 'transit':
     transit_utils.plot_transit(t,f,parameters,ld_law)
