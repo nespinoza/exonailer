@@ -88,12 +88,15 @@ class normal_parameter:
           self.prior_hypp = prior_hypp
           self.posterior = []
 
-      def get_ln_prior(self,x):
+      def get_ln_prior(self):
           return np.log(1./np.sqrt(2.*np.pi*(prior_hypp[1]**2)))-\
-                 0.5*(((self.prior_hypp[0]-x)**2/(self.prior_hypp[1]**2)))
+                 0.5*(((self.prior_hypp[0]-self.value)**2/(self.prior_hypp[1]**2)))
 
       def set_value(self,new_val):
           self.value = new_val
+
+      def set_posterior(self,posterior_chain):
+          self.posterior = posterior_chain
 
 class uniform_parameter:
       """
@@ -109,7 +112,7 @@ class uniform_parameter:
           self.prior_hypp = prior_hypp
           self.posterior = []
 
-      def get_ln_prior(self,x):
+      def get_ln_prior(self):
           return np.log(1./(prior_hypp[1]-self.prior_hypp[0]))
 
       def check_value(self,x):
@@ -120,6 +123,9 @@ class uniform_parameter:
  
       def set_value(self,new_val):
           self.value = new_val
+
+      def set_posterior(self,posterior_chain):
+          self.posterior = posterior_chain
 
 log1 = np.log(1)
 class jeffreys_parameter:
@@ -136,8 +142,8 @@ class jeffreys_parameter:
           self.prior_hypp = prior_hypp
           self.posterior = []
 
-      def get_ln_prior(self,x):
-          return log1 - np.log(x*np.log(self.prior_hypp[1]/self.prior_hypp[0]))
+      def get_ln_prior(self):
+          return log1 - np.log(self.value*np.log(self.prior_hypp[1]/self.prior_hypp[0]))
 
       def check_value(self,x):
           if x > self.prior_hypp[0] and  x < self.prior_hypp[1]:
@@ -147,6 +153,9 @@ class jeffreys_parameter:
 
       def set_value(self,new_val):
           self.value = new_val
+
+      def set_posterior(self,posterior_chain):
+          self.posterior = posterior_chain
 
 class constant_parameter:
       """
