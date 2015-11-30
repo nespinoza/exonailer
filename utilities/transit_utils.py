@@ -218,9 +218,26 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
     order as they were inputted. This includes the sampled parameters from all the walkers.
     """
 
+    # If mode is not RV:
     if mode != 'rv':
         # Initialize the parameters of the transit model:
         params,m = init_batman(times,law=ld_law)
+        # Prepare the data:
+        xt = times.astype('float64')
+        yt = relative_flux.astype('float64')
+        if error is None:
+            yerrt = 0.0
+        else:
+            yerrt = error.astype('float64')
+
+    # If mode is not transit, prepare the data too:
+    if mode != 'transit':
+       xrv = times_rv.astype('float64')
+       yrv = rv.astype('float64')
+       if rv_err is None:
+           yerrrv = 0.0
+       else:
+           yerrrv = rv_err.astype('float64')
 
     # Initialize the variable names:
     transit_params = ['P','t0','a','p','inc','sigma_w','sigma_r','q1','q2']
@@ -318,8 +335,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                       k=k+1
         return like
 
-    def lnlike_transit(t, y, yerr, gamma=1.0):
-
+    def lnlike_transit(gamma=1.0):
         coeff1,coeff2 = reverse_ld_coeffs(ld_law, \
                         parameters['q1']['object'].value,parameters['q2']['object'].value)
         params.t0 = parameters['t0']['object'].value
@@ -332,26 +348,26 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         params.u = [coeff1,coeff2]
         model = m.light_curve(params)
         if noise_model == '1/f':
-           residuals = (y-model)*1e6
+           residuals = (yt-model)*1e6
            log_like = get_fn_likelihood(residuals,parameters['sigma_w']['object'].value,\
                            parameters['sigma_r']['object'].value)
         else:
-           inv_sigma2 = 1.0/((yerr)**2 + (parameters['sigma_w']['object'].value)**2)
-           log_like = -0.5*(np.sum(((y-model)*1e6)**2*inv_sigma2 - np.log(inv_sigma2)))
+           inv_sigma2 = 1.0/((yerrt)**2 + (parameters['sigma_w']['object'].value)**2)
+           log_like = -0.5*(np.sum(((yt-model)*1e6)**2*inv_sigma2 - np.log(inv_sigma2)))
         return log_like
 
-    def lnlike_rv(t, y, yerr):
+    def lnlike_rv():
         model = parameters['mu']['object'].value - \
                         parameters['K']['object'].value*\
-                        np.sin(2.*np.pi*(t-parameters['t0']['object'].value)/parameters['P']['object'].value)
-        residuals = (y-model)
-        inv_sigma2 = 1.0/((yerr)**2 + (parameters['sigma_w_rv']['object'].value)**2)
+                        np.sin(2.*np.pi*(xrv-parameters['t0']['object'].value)/parameters['P']['object'].value)
+        residuals = (yrv-model)
+        inv_sigma2 = 1.0/((yerrrv)**2 + (parameters['sigma_w_rv']['object'].value)**2)
         log_like = -0.5*(np.sum((residuals)**2*inv_sigma2 - np.log(inv_sigma2)))
         return log_like
 
-    def lnlike_full(tt, yt, yerrt, trv, yrv, yerrrv):
-        return lnlike_rv(trv, yrv, yerrrv) + \
-               lnlike_transit(tt, yt, yerrt)
+    def lnlike_full():
+        return lnlike_rv() + \
+               lnlike_transit()
 
     def lnprior_full(theta):
         # Read in the values of the parameter vector and update values of the objects.
@@ -368,28 +384,13 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
 
         return total_prior
 
-    def lnprob_full(theta, xt, yt, yerrt, xrv, yrv, yerrrv):
+    def lnprob_full(theta):
         lp = lnprior_full(theta)
         if not np.isfinite(lp):
             return -np.inf
-        return lp + lnlike_full(xt, yt, yerrt, xrv, yrv, yerrrv)
+        return lp + lnlike_full()
 
     if mode == 'full':
-        # Prepare the data:
-        xt = times.astype('float64')
-        yt = relative_flux.astype('float64')
-        if error is None:
-            yerrt = 0.0
-        else:
-            yerrt = error.astype('float64')
-
-        xrv = times_rv.astype('float64')
-        yrv = rv.astype('float64')
-        if rv_err is None:
-            yerrrv = 0.0
-        else:
-            yerrrv = rv_err.astype('float64')
-
         # Define the posterior to use:
         lnprob = lnprob_full 
 
@@ -403,7 +404,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
             theta_0.append(parameters[all_mcmc_params[i]]['object'].value)
 
         # Get ML estimate:
-        result = op.minimize(nll, theta_0, args=(xt, yt, yerrt, xrv, yrv, yerrrv))
+        result = op.minimize(nll, theta_0)
         theta_ml = result["x"]
 
         # Now define parameters for emcee:
@@ -411,7 +412,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
 
         # Run the MCMC:
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(xt, yt, yerrt, xrv, yrv, yerrrv))
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob)
 
         sampler.run_mcmc(pos, njumps+nburnin)
 
