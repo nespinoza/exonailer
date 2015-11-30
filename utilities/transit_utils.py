@@ -236,7 +236,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         parameters_to_check.append('P')
     if parameters['t0']['type'] == 'FIXED':
         transit_params.pop(transit_params.index('t0'))
-    elif priors['t0']['type'] in ['Uniform','Jeffreys']:
+    elif parameters['t0']['type'] in ['Uniform','Jeffreys']:
         parameters_to_check.append('t0')
     if parameters['a']['type'] == 'FIXED':
         transit_params.pop(transit_params.index('a'))

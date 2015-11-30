@@ -89,7 +89,7 @@ class normal_parameter:
           self.posterior = []
 
       def get_ln_prior(self):
-          return np.log(1./np.sqrt(2.*np.pi*(prior_hypp[1]**2)))-\
+          return np.log(1./np.sqrt(2.*np.pi*(self.prior_hypp[1]**2)))-\
                  0.5*(((self.prior_hypp[0]-self.value)**2/(self.prior_hypp[1]**2)))
 
       def set_value(self,new_val):
@@ -113,7 +113,7 @@ class uniform_parameter:
           self.posterior = []
 
       def get_ln_prior(self):
-          return np.log(1./(prior_hypp[1]-self.prior_hypp[0]))
+          return np.log(1./(self.prior_hypp[1]-self.prior_hypp[0]))
 
       def check_value(self,x):
           if x > self.prior_hypp[0] and  x < self.prior_hypp[1]:
