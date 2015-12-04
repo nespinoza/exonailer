@@ -103,7 +103,7 @@ def pre_process(t,f,f_err,detrend,get_outliers,n_ommit,window,parameters,ld_law)
         if f_err is not None:
             f_err = good_errors
 
-    return t, phases, f, f_err
+    return t.astype('float64'), phases.astype('float64'), f.astype('float64'), f_err.astype('float64')
 
 def init_batman(t,law):
     """
@@ -208,11 +208,11 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
 
       noise_model:      Currently supports two types: 
  
-                          'white':   It assumes the underlying noise model is white, gaussian
-                                     noise.
+                          'white'    :   It assumes the underlying noise model is white, gaussian
+                                         noise.
 
-                          '1/f'  :   It assumes the underlying noise model is a sum of a 
-                                     white noise process plus a 1/f noise model.
+                          'flicker'  :   It assumes the underlying noise model is a sum of a 
+                                         white noise process plus a 1/f noise model.
 
     The outputs are the chains of each of the parameters in the theta_0 array in the same 
     order as they were inputted. This includes the sampled parameters from all the walkers.
@@ -246,64 +246,75 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
     parameters_to_check = []
 
     # Eliminate from the parameter list parameters that are being fixed:
-    if parameters['P']['type'] == 'FIXED':
-        transit_params.pop(transit_params.index('P'))
-    elif parameters['P']['type'] in ['Uniform','Jeffreys']:
-        parameters_to_check.append('P')
-    if parameters['t0']['type'] == 'FIXED':
-        transit_params.pop(transit_params.index('t0'))
-    elif parameters['t0']['type'] in ['Uniform','Jeffreys']:
-        parameters_to_check.append('t0')
-    if parameters['a']['type'] == 'FIXED':
-        transit_params.pop(transit_params.index('a'))
-    elif parameters['a']['type'] in ['Uniform','Jeffreys']:
-        parameters_to_check.append('a')
-    if parameters['p']['type'] == 'FIXED':
-        transit_params.pop(transit_params.index('p'))
-    elif parameters['p']['type'] in ['Uniform','Jeffreys']:
-        parameters_to_check.append('p')
-    if parameters['inc']['type'] == 'FIXED':
-        transit_params.pop(transit_params.index('inc'))
-    elif parameters['inc']['type'] in ['Uniform','Jeffreys']:
-        parameters_to_check.append('inc')
-    if parameters['sigma_w']['type'] == 'FIXED':
-        transit_params.pop(transit_params.index('sigma_w'))
-    elif parameters['sigma_w']['type'] in ['Uniform','Jeffreys']:
-        parameters_to_check.append('sigma_w')
-    if parameters['q1']['type'] == 'FIXED':
-        transit_params.pop(transit_params.index('q1'))
-    elif parameters['q1']['type'] in ['Uniform','Jeffreys']:
-        parameters_to_check.append('q1')
-    if parameters['q2']['type'] == 'FIXED':
-        transit_params.pop(transit_params.index('q2'))
-    elif parameters['q2']['type'] in ['Uniform','Jeffreys']:
-        parameters_to_check.append('q2')
-    if parameters['mu']['type'] == 'FIXED':
-        rv_params.pop(rv_params.index('mu'))
-    elif parameters['mu']['type'] in ['Uniform','Jeffreys']:
-        parameters_to_check.append('mu')
-    if parameters['K']['type'] == 'FIXED':
-        rv_params.pop(rv_params.index('K'))
-    elif parameters['K']['type'] in ['Uniform','Jeffreys']:
-        parameters_to_check.append('K')
-    if noise_model == '1/f':
-        if parameters['sigma_r']['type'] == 'FIXED':
+    if mode != 'rv':
+        if parameters['P']['type'] == 'FIXED':
+            transit_params.pop(transit_params.index('P'))
+        elif parameters['P']['type'] in ['Uniform','Jeffreys']:
+            parameters_to_check.append('P')
+        if parameters['t0']['type'] == 'FIXED':
+            transit_params.pop(transit_params.index('t0'))
+        elif parameters['t0']['type'] in ['Uniform','Jeffreys']:
+            parameters_to_check.append('t0')
+        if parameters['a']['type'] == 'FIXED':
+            transit_params.pop(transit_params.index('a'))
+        elif parameters['a']['type'] in ['Uniform','Jeffreys']:
+            parameters_to_check.append('a')
+        if parameters['p']['type'] == 'FIXED':
+            transit_params.pop(transit_params.index('p'))
+        elif parameters['p']['type'] in ['Uniform','Jeffreys']:
+            parameters_to_check.append('p')
+        if parameters['inc']['type'] == 'FIXED':
+            transit_params.pop(transit_params.index('inc'))
+        elif parameters['inc']['type'] in ['Uniform','Jeffreys']:
+            parameters_to_check.append('inc')
+        if parameters['sigma_w']['type'] == 'FIXED':
+            transit_params.pop(transit_params.index('sigma_w'))
+        elif parameters['sigma_w']['type'] in ['Uniform','Jeffreys']:
+            parameters_to_check.append('sigma_w')
+        if parameters['q1']['type'] == 'FIXED':
+            transit_params.pop(transit_params.index('q1'))
+        elif parameters['q1']['type'] in ['Uniform','Jeffreys']:
+            parameters_to_check.append('q1')
+        if parameters['q2']['type'] == 'FIXED':
+            transit_params.pop(transit_params.index('q2'))
+        elif parameters['q2']['type'] in ['Uniform','Jeffreys']:
+            parameters_to_check.append('q2')
+        if noise_model == 'flicker':
+            if parameters['sigma_r']['type'] == 'FIXED':
+                transit_params.pop(transit_params.index('sigma_r'))
+            elif parameters['sigma_r']['type'] in ['Uniform','Jeffreys']:
+                parameters_to_check.append('sigma_r')
+        else:
             transit_params.pop(transit_params.index('sigma_r'))
-        elif parameters['sigma_r']['type'] in ['Uniform','Jeffreys']:
-            parameters_to_check.append('sigma_r')
-    else:
-        transit_params.pop(transit_params.index('sigma_r'))
-    if mode != 'transit' and rv_jitter:
+
+    if mode != 'transit':
+        if parameters['mu']['type'] == 'FIXED':
+            rv_params.pop(rv_params.index('mu'))
+        elif parameters['mu']['type'] in ['Uniform','Jeffreys']:
+            parameters_to_check.append('mu')
+        if parameters['K']['type'] == 'FIXED':
+            rv_params.pop(rv_params.index('K'))
+        elif parameters['K']['type'] in ['Uniform','Jeffreys']:
+            parameters_to_check.append('K')
         if parameters['sigma_w_rv']['type'] == 'FIXED':
             rv_params.pop(rv_params.index('sigma_w_rv'))       
         elif parameters['sigma_w_rv']['type'] in ['Uniform','Jeffreys']:
             parameters_to_check.append('sigma_w_rv')
-    else: 
-        sigma_w_rv = 0.0 
-        rv_params.pop(rv_params.index('sigma_w_rv'))
+        else: 
+            sigma_w_rv = 0.0 
+            rv_params.pop(rv_params.index('sigma_w_rv'))
 
-    all_mcmc_params = transit_params + rv_params
+    if mode == 'transit':
+       all_mcmc_params = transit_params 
+    elif mode == 'rv':
+       all_mcmc_params = rv_params
+    else:
+       all_mcmc_params = transit_params + rv_params
+
     n_params = len(all_mcmc_params)
+
+    def normal_like(x,mu,tau):
+        return 0.5*(np.log(tau) - np.log(2.*np.pi) - tau*( (x-mu)**2))
 
     def get_fn_likelihood(residuals, sigma_w, sigma_r, gamma=1.0):
         like=0.0
@@ -346,12 +357,12 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         params.w = 90.0
         params.u = [coeff1,coeff2]
         model = m.light_curve(params)
-        if noise_model == '1/f':
+        if noise_model == 'flicker':
            residuals = (yt-model)*1e6
            log_like = get_fn_likelihood(residuals,parameters['sigma_w']['object'].value,\
                            parameters['sigma_r']['object'].value)
         else:
-           inv_sigma2 = 1.0/((yerrt)**2 + (parameters['sigma_w']['object'].value)**2)
+           inv_sigma2 = 1.0/((yerrt*1e6)**2 + (parameters['sigma_w']['object'].value)**2)
            log_like = -0.5*(np.sum(((yt-model)*1e6)**2*inv_sigma2 - np.log(inv_sigma2)))
         return log_like
 
@@ -364,11 +375,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         log_like = -0.5*(np.sum((residuals)**2*inv_sigma2 - np.log(inv_sigma2)))
         return log_like
 
-    def lnlike_full():
-        return lnlike_rv() + \
-               lnlike_transit()
-
-    def lnprior_full(theta):
+    def lnprior(theta):
         # Read in the values of the parameter vector and update values of the objects.
         # For each one, if everything is ok, get the total prior, which is the sum 
         # of the independant priors for each parameter:
@@ -384,45 +391,61 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         return total_prior
 
     def lnprob_full(theta):
-        lp = lnprior_full(theta)
+        lp = lnprior(theta)
         if not np.isfinite(lp):
             return -np.inf
-        return lp + lnlike_full()
+        return lp + lnlike_rv() + lnlike_transit()
+
+    def lnprob_transit(theta):
+        lp = lnprior(theta)
+        if not np.isfinite(lp):
+            return -np.inf
+        return lp + lnlike_transit()
+
+    def lnprob_rv(theta):
+        lp = lnprior(theta)
+        if not np.isfinite(lp):
+            return -np.inf
+        return lp + lnlike_rv()
 
     if mode == 'full':
         # Define the posterior to use:
         lnprob = lnprob_full 
-
-        # Start at the maximum likelihood value:
-        nll = lambda *args: -lnprob_full(*args)
-
-        # Extract initial input values of the parameters to be fitted:
-        theta_0 = []
-        for i in range(n_params):
-            theta_0.append(parameters[all_mcmc_params[i]]['object'].value)
-
-        # Get ML estimate:
-        result = op.minimize(nll, theta_0)
-        theta_ml = result["x"]
-
-        # Now define parameters for emcee:
-        ndim = len(theta_ml)
-        pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
-
-        # Run the MCMC:
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob)
-
-        sampler.run_mcmc(pos, njumps+nburnin)
-
-        # Save the parameter chains for the parameters that were actually varied:
-        for i in range(n_params):
-            c_param = all_mcmc_params[i]
-            c_p_chain = np.array([])
-            for walker in range(nwalkers):
-                c_p_chain = np.append(c_p_chain,sampler.chain[walker,nburnin:,i])
-            parameters[c_param]['object'].set_posterior(np.copy(c_p_chain))
+    elif mode == 'transit':
+        lnprob = lnprob_transit
+    elif mode == 'rv':
+        lnprob = lnprob_rv
     else:
         print 'Mode not supported. Doing nothing.'
+
+    # Start at the maximum likelihood value:
+    nll = lambda *args: -lnprob(*args)
+
+    # Extract initial input values of the parameters to be fitted:
+    theta_0 = []
+    for i in range(n_params):
+        theta_0.append(parameters[all_mcmc_params[i]]['object'].value)
+
+    # Get ML estimate:
+    result = op.minimize(nll, theta_0)
+    theta_ml = result["x"]
+
+    # Now define parameters for emcee:
+    ndim = len(theta_ml)
+    pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
+    
+    # Run the MCMC:
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob)
+
+    sampler.run_mcmc(pos, njumps+nburnin)
+
+    # Save the parameter chains for the parameters that were actually varied:
+    for i in range(n_params):
+        c_param = all_mcmc_params[i]
+        c_p_chain = np.array([])
+        for walker in range(nwalkers):
+            c_p_chain = np.append(c_p_chain,sampler.chain[walker,nburnin:,i])
+        parameters[c_param]['object'].set_posterior(np.copy(c_p_chain))
 
 import matplotlib.pyplot as plt
 def plot_transit(t,f,parameters,ld_law):
@@ -463,7 +486,7 @@ def plot_transit(t,f,parameters,ld_law):
     idx = np.argsort(model_phase)
     plt.plot(phases,f,'.',color='black',alpha=0.4)
     plt.plot(model_phase[idx],model_lc[idx])
-    plt.plot(phases,f-model_pred+(1-1.4*(p**2)),'.',color='black',alpha=0.4)
+    plt.plot(phases,(f-model_pred) + (1-1.4*p**2),'.',color='black',alpha=0.4)
     plt.show()
 
 def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter):

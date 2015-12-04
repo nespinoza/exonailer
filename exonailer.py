@@ -9,13 +9,13 @@ import numpy as np
 ################# OPTIONS ######################
 
 # Define the target name, detrending method and parameters of it:
-target = 'CL001-04'
-phot_noise_model = 'white'
-phot_detrend = 'mfilter'
+target = 'WASP-50'
+phot_noise_model = 'flicker'
+phot_detrend = None#'mfilter'
 window = 41
 
 # Define if you want to perform automatic outlier removal (sigma-clipping):
-phot_get_outliers = True
+phot_get_outliers = False
 
 # Define which transits you want to ommit (counted from first transit):
 n_ommit = []#[3,9]
@@ -24,15 +24,15 @@ n_ommit = []#[3,9]
 ld_law = 'quadratic'
 
 # Define the mode to be used:
-mode = 'full' 
+mode = 'transit' 
 
 # Define noise properties:
 rv_jitter = False
 
 # Define emcee parameters:
 nwalkers = 100
-njumps = 5000
-nburnin = 5000
+njumps = 1e3
+nburnin = 1e3
 
 ################################################
 
