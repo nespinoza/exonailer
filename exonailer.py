@@ -9,13 +9,13 @@ import numpy as np
 ################# OPTIONS ######################
 
 # Define the target name, detrending method and parameters of it:
-target = 'WASP-50'
+target = 'TARGET-001'
 phot_noise_model = 'flicker'
 phot_detrend = None#'mfilter'
 window = 41
 
 # Define if you want to perform automatic outlier removal (sigma-clipping):
-phot_get_outliers = False
+phot_get_outliers = None#True
 
 # Define which transits you want to ommit (counted from first transit):
 n_ommit = []#[3,9]
@@ -48,8 +48,7 @@ parameters = general_utils.read_priors(target)
 if mode != 'rvs':
     t,phases,f, f_err = transit_utils.pre_process(t,f,f_err,phot_detrend,\
                                                   phot_get_outliers,n_ommit,\
-                                                  window,parameters,ld_law)
-
+                                                  window,parameters,ld_law, mode)
 # Create results folder if not already created:
 if not os.path.exists('results'):
     os.mkdir('results')

@@ -25,7 +25,7 @@ def read_transit_params(prior_dict):
         vals[i] = param['object'].value
     return vals
 
-def pre_process(t,f,f_err,detrend,get_outliers,n_ommit,window,parameters,ld_law):
+def pre_process(t,f,f_err,detrend,get_outliers,n_ommit,window,parameters,ld_law,mode):
     # Now, the first phase in transit fitting is to 'detrend' the 
     # data. This is done with the 'detrend' flag. If 
     # the data is already detrended, set the flag to None:
@@ -53,6 +53,25 @@ def pre_process(t,f,f_err,detrend,get_outliers,n_ommit,window,parameters,ld_law)
         # Convert to zeros fluxes at the events you want to eliminate:
         for n in n_ommit:
             idx = np.where((phases>n-0.5)&(phases<n+0.5))[0]
+            f[idx] = np.zeros(len(idx))
+
+        # Eliminate them from the t,f and phases array:
+        idx = np.where(f!=0.0)[0]
+        t = t[idx]
+        f = f[idx]
+        phases = phases[idx]
+        if f_err is not None:
+            f_err = f_err[idx]
+
+    if mode == 'transit_noise':
+        # Get the phases:
+        phases = (t-t0)/P
+
+        # Get the transit events in phase space:
+        transit_events = np.arange(ceil(np.min(phases)),floor(np.max(phases))+1)
+
+        for n in transit_events:
+            idx = np.where((phases>n-0.01)&(phases<n+0.01))[0]
             f[idx] = np.zeros(len(idx))
 
         # Eliminate them from the t,f and phases array:
@@ -102,8 +121,10 @@ def pre_process(t,f,f_err,detrend,get_outliers,n_ommit,window,parameters,ld_law)
         phases = good_phases
         if f_err is not None:
             f_err = good_errors
-
-    return t.astype('float64'), phases.astype('float64'), f.astype('float64'), f_err.astype('float64')
+    if f_err is not None:
+       return t.astype('float64'), phases.astype('float64'), f.astype('float64'), f_err.astype('float64')
+    else:
+       return t.astype('float64'), phases.astype('float64'), f.astype('float64'), f_err
 
 def init_batman(t,law):
     """
@@ -230,7 +251,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
             yerrt = error.astype('float64')
 
     # If mode is not transit, prepare the data too:
-    if mode != 'transit':
+    if 'transit' not in mode:
        xrv = times_rv.astype('float64')
        yrv = rv.astype('float64')
        if rv_err is None:
@@ -308,13 +329,16 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
        all_mcmc_params = transit_params 
     elif mode == 'rv':
        all_mcmc_params = rv_params
+    elif mode == 'transit_noise':
+       all_mcmc_params = ['sigma_w','sigma_r']
     else:
        all_mcmc_params = transit_params + rv_params
 
     n_params = len(all_mcmc_params)
+    log2pi = np.log(2.*np.pi)
 
     def normal_like(x,mu,tau):
-        return 0.5*(np.log(tau) - np.log(2.*np.pi) - tau*( (x-mu)**2))
+        return 0.5*(np.log(tau) - log2pi - tau*( (x-mu)**2))
 
     def get_fn_likelihood(residuals, sigma_w, sigma_r, gamma=1.0):
         like=0.0
@@ -408,6 +432,16 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
             return -np.inf
         return lp + lnlike_rv()
 
+    def lnprob_transit_noise(theta):
+        lp = lnprior(theta)
+        if not np.isfinite(lp):
+            return -np.inf
+
+        residuals = (yt-1.0)*1e6
+        log_like = get_fn_likelihood(residuals,parameters['sigma_w']['object'].value,\
+                                     parameters['sigma_r']['object'].value)
+        return lp + log_like
+
     if mode == 'full':
         # Define the posterior to use:
         lnprob = lnprob_full 
@@ -415,6 +449,8 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         lnprob = lnprob_transit
     elif mode == 'rv':
         lnprob = lnprob_rv
+    elif mode == 'transit_noise':
+        lnprob = lnprob_transit_noise
     else:
         print 'Mode not supported. Doing nothing.'
 
