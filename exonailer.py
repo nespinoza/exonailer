@@ -9,8 +9,8 @@ import numpy as np
 ################# OPTIONS ######################
 
 # Define the target name, detrending method and parameters of it:
-target = 'TARGET-001'
-phot_noise_model = 'flicker'
+target = 'WASP-50-2'
+phot_noise_model = 'white'
 phot_detrend = None#'mfilter'
 window = 41
 
@@ -19,6 +19,13 @@ phot_get_outliers = None#True
 
 # Define which transits you want to ommit (counted from first transit):
 n_ommit = []#[3,9]
+
+# Define if you want to perform the resampling technique and in 
+# which phase range you want to perform such resampling. Additionally, 
+# define how many samples you want to resample:
+resampling = True
+phase_max = 0.01
+N_resampling = 10
 
 # Limb-darkening law to be used:
 ld_law = 'quadratic'
@@ -30,9 +37,9 @@ mode = 'transit'
 rv_jitter = False
 
 # Define emcee parameters:
-nwalkers = 100
-njumps = 1e3
-nburnin = 1e3
+nwalkers = 1000
+njumps = 500
+nburnin = 500
 
 ################################################
 
@@ -58,7 +65,9 @@ if not os.path.exists('results/'+target+'_'+mode+'_'+phot_noise_model+'_'+ld_law
     transit_utils.exonailer_mcmc_fit(t, f, f_err, t_rv, rv, rv_err, \
                                      parameters, ld_law, mode, rv_jitter = rv_jitter, \
                                      njumps = njumps, nburnin = nburnin, \
-                                     nwalkers = nwalkers,  noise_model = phot_noise_model)
+                                     nwalkers = nwalkers,  noise_model = phot_noise_model\
+                                     resampling = resampling, idx_resampling = idx_resampling,\
+                                     N_resampling = N_resampling)
 
     general_utils.save_results(target,mode,phot_noise_model,ld_law,parameters)
 

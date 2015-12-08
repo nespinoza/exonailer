@@ -183,7 +183,8 @@ import Wavelets
 import scipy.optimize as op
 def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                        parameters, ld_law, mode, rv_jitter = False, \
-                       njumps = 500, nburnin = 500, nwalkers = 100, noise_model = 'white'):
+                       njumps = 500, nburnin = 500, nwalkers = 100, noise_model = 'white',\
+                       resampling = False, idx_resampling = [], texp = 0.01881944, N_resampling = 5):
     """
     This function performs an MCMC fitting procedure using a transit model 
     fitted to input data using the batman package (Kreidberg, 2015) assuming 
@@ -235,12 +236,22 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                           'flicker'  :   It assumes the underlying noise model is a sum of a 
                                          white noise process plus a 1/f noise model.
 
+      resampling:       Binary variable defining if you want to do resampling of the transit 
+                        lightcurve or not (http://arxiv.org/abs/1004.3741).
+
+      idx_resampling:   This defines the indexes over which you want to perform such resampling 
+                        (selective resampling).i
+
+      texp          :   Exposure time in days of each datapoint (default is Kepler long-cadence, 
+                        taken from here: http://archive.stsci.edu/mast_faq.php?mission=KEPLER)
+
+      N_resampling:     Define how many points to resample.
+
     The outputs are the chains of each of the parameters in the theta_0 array in the same 
     order as they were inputted. This includes the sampled parameters from all the walkers.
     """
     # If mode is not RV:
     if mode != 'rv':
-        # Initialize the parameters of the transit model:
         params,m = init_batman(times,law=ld_law)
         # Prepare the data:
         xt = times.astype('float64')
@@ -249,6 +260,23 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
             yerrt = 0.0
         else:
             yerrt = error.astype('float64')
+        n_data_transit = len(xt)
+        # Initialize the parameters of the transit model, 
+        # and prepare resampling data if resampling is True:
+        if resampling:
+           t_resampling = np.array([])
+           for i in range(len(idx_resampling)):
+               t_resampling = np.append(t_resampling, \
+                                        np.linspace(xt[idx_resampling[i]]-(texp/2.0),\
+                                        xt[idx_resampling[i]]+(texp/2.0),\
+                                        N_resampling))
+
+           params,m = init_batman(t_resampling,law=ld_law)
+           transit_flat = np.ones(len(xt))
+           transit_flat[idx_resampling] = np.zeros(len(idx_resampling))
+        else:
+           params,m = init_batman(xt,law=ld_law)
+
 
     # If mode is not transit, prepare the data too:
     if 'transit' not in mode:
@@ -258,6 +286,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
            yerrrv = 0.0
        else:
            yerrrv = rv_err.astype('float64')
+       n_data_rvs = len(xrv)
 
     # Initialize the variable names:
     transit_params = ['P','t0','a','p','inc','sigma_w','sigma_r','q1','q2']
@@ -335,8 +364,6 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
        all_mcmc_params = transit_params + rv_params
 
     n_params = len(all_mcmc_params)
-    n_data_transit = len(xt)
-    n_data_rvs = len(xrv)
     log2pi = np.log(2.*np.pi)
 
     def normal_like(x,mu,tau):
@@ -383,7 +410,12 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         params.w = 90.0
         params.u = [coeff1,coeff2]
         model = m.light_curve(params)
-        residuals = (yt-model)*1e6
+        if resampling:
+           for i in range(len(idx_resampling)):
+               transit_flat[idx_resampling[i]] = np.mean(model[i*N_resampling:N_resampling*(i+1)])
+           residuals = (yt-transit_flat)*1e6
+        else:
+           residuals = (yt-model)*1e6
         if noise_model == 'flicker':
            log_like = get_fn_likelihood(residuals,parameters['sigma_w']['object'].value,\
                            parameters['sigma_r']['object'].value)
@@ -486,7 +518,8 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         parameters[c_param]['object'].set_posterior(np.copy(c_p_chain))
 
 import matplotlib.pyplot as plt
-def plot_transit(t,f,parameters,ld_law):
+def plot_transit(t,f,parameters,ld_law,\
+                 resampling = False, idx_resampling = [], texp = 0.01881944, N_resampling = 5):
         
     # Extract transit parameters:
     P = parameters['P']['object'].value
@@ -506,7 +539,21 @@ def plot_transit(t,f,parameters,ld_law):
 
     # Generate model lightcurve and predicted one:
     params,m = init_batman(model_t,law=ld_law)
-    params2,m2 = init_batman(t,law=ld_law)
+    if resampling:
+       t_resampling = np.array([])
+       for i in range(len(idx_resampling)):
+           t_resampling = np.append(t_resampling, \
+                                    np.linspace(t[idx_resampling[i]]-(texp/2.0),\
+                                    t[idx_resampling[i]]+(texp/2.0),\
+                                    N_resampling))
+
+       params,m = init_batman(t_resampling,law=ld_law)
+       transit_flat = np.ones(len(xt))
+       transit_flat[idx_resampling] = np.zeros(len(idx_resampling))
+       params2,m2 = init_batman(t_resampling,law=ld_law)
+    else:
+       params2,m2 = init_batman(t,law=ld_law)
+
     coeff1,coeff2 = reverse_ld_coeffs(ld_law, q1, q2)
     params.t0 = t0
     params.per = P
@@ -515,7 +562,13 @@ def plot_transit(t,f,parameters,ld_law):
     params.inc = inc
     params.u = [coeff1,coeff2]
     model_lc = m.light_curve(params)
-    model_pred = m2.light_curve(params)
+    if resampling:  
+       model = m2.light_curve(params)
+       for i in range(len(idx_resampling)):
+           transit_flat[idx_resampling[i]] = np.mean(model[i*N_resampling:N_resampling*(i+1)])
+       model_pred = transit_flat
+    else:
+       model_pred = m2.light_curve(params)
 
     # Now plot:
     plt.style.use('ggplot')
@@ -527,7 +580,8 @@ def plot_transit(t,f,parameters,ld_law):
     plt.plot(phases,(f-model_pred) + (1-1.4*p**2),'.',color='black',alpha=0.4)
     plt.show()
 
-def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter):
+def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,resampling = False, \
+                        idx_resampling = [], texp = 0.01881944, N_resampling = 5):
     # Extract parameters:
     P = parameters['P']['object'].value
     inc = parameters['inc']['object'].value
