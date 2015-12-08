@@ -335,6 +335,8 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
        all_mcmc_params = transit_params + rv_params
 
     n_params = len(all_mcmc_params)
+    n_data_transit = len(xt)
+    n_data_rvs = len(xrv)
     log2pi = np.log(2.*np.pi)
 
     def normal_like(x,mu,tau):
@@ -381,22 +383,22 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         params.w = 90.0
         params.u = [coeff1,coeff2]
         model = m.light_curve(params)
+        residuals = (yt-model)*1e6
         if noise_model == 'flicker':
-           residuals = (yt-model)*1e6
            log_like = get_fn_likelihood(residuals,parameters['sigma_w']['object'].value,\
                            parameters['sigma_r']['object'].value)
         else:
-           inv_sigma2 = 1.0/((yerrt*1e6)**2 + (parameters['sigma_w']['object'].value)**2)
-           log_like = -0.5*(np.sum(((yt-model)*1e6)**2*inv_sigma2 - np.log(inv_sigma2)))
+           taus = 1.0/((yerrt*1e6)**2 + (parameters['sigma_w']['object'].value)**2)
+           log_like = -0.5*(n_data_transit*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
         return log_like
 
     def lnlike_rv():
         model = parameters['mu']['object'].value - \
-                        parameters['K']['object'].value*\
-                        np.sin(2.*np.pi*(xrv-parameters['t0']['object'].value)/parameters['P']['object'].value)
+                parameters['K']['object'].value*\
+                np.sin(2.*np.pi*(xrv-parameters['t0']['object'].value)/parameters['P']['object'].value)
         residuals = (yrv-model)
-        inv_sigma2 = 1.0/((yerrrv)**2 + (parameters['sigma_w_rv']['object'].value)**2)
-        log_like = -0.5*(np.sum((residuals)**2*inv_sigma2 - np.log(inv_sigma2)))
+        taus = 1.0/((yerrrv)**2 + (parameters['sigma_w_rv']['object'].value)**2)
+        log_like = -0.5*(n_data_rvs*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
         return log_like
 
     def lnprior(theta):
@@ -442,8 +444,8 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                                      parameters['sigma_r']['object'].value)
         return lp + log_like
 
+    # Define the posterior to use:
     if mode == 'full':
-        # Define the posterior to use:
         lnprob = lnprob_full 
     elif mode == 'transit':
         lnprob = lnprob_transit
