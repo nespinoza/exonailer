@@ -9,7 +9,7 @@ import numpy as np
 ################# OPTIONS ######################
 
 # Define the target name, detrending method and parameters of it:
-target = 'WASP-50-2'
+target = 'WASP-50-3'
 phot_noise_model = 'white'
 phot_detrend = None#'mfilter'
 window = 41
@@ -23,7 +23,7 @@ n_ommit = []#[3,9]
 # Define if you want to perform the resampling technique and in 
 # which phase range you want to perform such resampling. Additionally, 
 # define how many samples you want to resample:
-resampling = True
+resampling = False
 phase_max = 0.01
 N_resampling = 10
 
@@ -56,6 +56,12 @@ if mode != 'rvs':
     t,phases,f, f_err = transit_utils.pre_process(t,f,f_err,phot_detrend,\
                                                   phot_get_outliers,n_ommit,\
                                                   window,parameters,ld_law, mode)
+    if resampling:
+        # Define indexes between which data will be resampled:
+        idx_resampling = np.where((phases>-phase_max)&(phases<phase_max))[0]
+    else:
+        idx_resampling = []
+
 # Create results folder if not already created:
 if not os.path.exists('results'):
     os.mkdir('results')
@@ -65,7 +71,7 @@ if not os.path.exists('results/'+target+'_'+mode+'_'+phot_noise_model+'_'+ld_law
     transit_utils.exonailer_mcmc_fit(t, f, f_err, t_rv, rv, rv_err, \
                                      parameters, ld_law, mode, rv_jitter = rv_jitter, \
                                      njumps = njumps, nburnin = nburnin, \
-                                     nwalkers = nwalkers,  noise_model = phot_noise_model\
+                                     nwalkers = nwalkers,  noise_model = phot_noise_model,\
                                      resampling = resampling, idx_resampling = idx_resampling,\
                                      N_resampling = N_resampling)
 
