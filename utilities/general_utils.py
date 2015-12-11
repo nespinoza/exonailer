@@ -35,7 +35,7 @@ def read_data(target,mode):
             t,f,f_err = np.loadtxt('transit_data/'+target+'_lc.dat',unpack=True,usecols=(0,1,2))
         except:
             t,f = np.loadtxt('transit_data/'+target+'_lc.dat',unpack=True,usecols=(0,1))
-    if mode != 'transit':
+    if 'transit' not in mode:
         try:
             t_rv,rv,rv_err = np.loadtxt('rv_data/'+target+'_rvs.dat',unpack=True,usecols=(0,1,2))
         except:
@@ -55,7 +55,7 @@ def save_results(target,mode,phot_noise_model,ld_law,parameters):
     # Generate an output dictionary with the posteriors:
     out_dict = {}
     for parameter in parameters.keys():
-        if parameters[parameter]['type'] != 'FIXED':
+        if parameters[parameter]['type'] != 'FIXED' and len(parameters[parameter]['object'].posterior)>0:
             # Save parameter values in posterior file:
             param = parameters[parameter]['object'].value
             up_error = parameters[parameter]['object'].value_u-param
@@ -80,7 +80,10 @@ def read_results(target,mode,phot_noise_model,ld_law):
     posteriors = pickle.load(thefile)
     for parameter in parameters.keys():
         if parameters[parameter]['type'] != 'FIXED':
-            parameters[parameter]['object'].set_posterior(posteriors[parameter])  
+            try:
+                parameters[parameter]['object'].set_posterior(posteriors[parameter])  
+            except:
+                print 'No posterior for parameter '+parameter
     thefile.close()
     return parameters
 
@@ -107,7 +110,7 @@ def get_quantiles(dist,alpha = 0.68, method = 'median'):
     if(method == 'median'):
        med_idx = 0
        if(nsamples%2 == 0.0): # Number of points is even
-          med_idx_up = int(nsamples/2.)
+          med_idx_up = int(nsamples/2.)+1
           med_idx_down = med_idx_up-1
           param = (ordered_dist[med_idx_up]+ordered_dist[med_idx_down])/2.
           return param,ordered_dist[med_idx_up+nsamples_at_each_side],\
