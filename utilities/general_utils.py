@@ -13,17 +13,23 @@ def read_priors(target,filename = None):
         if line == '':
             break
         elif line[0] != '#':
-            param_name,prior_type,hyper_params = line.split()
-            priors[param_name] = {}
-            priors[param_name]['type'] = prior_type
-            if prior_type == 'Normal':
-               priors[param_name]['object'] = normal_parameter(np.array(hyper_params.split(',')).astype('float64'))
-            elif prior_type == 'Uniform':
-               priors[param_name]['object'] = uniform_parameter(np.array(hyper_params.split(',')).astype('float64'))
-            elif prior_type == 'Jeffreys':
-               priors[param_name]['object'] = jeffreys_parameter(np.array(hyper_params.split(',')).astype('float64'))
-            elif prior_type == 'FIXED':
-               priors[param_name]['object'] = constant_parameter(np.array(hyper_params.split(',')).astype('float64')[0])
+            # Extract values from text file: [0]: parameter name,
+            #                                [1]: prior type,
+            #                                [2]: hyperparameters,
+            #                                [3]: starting value (optional)
+            values = line.split()
+            priors[values[0]] = {}
+            priors[values[0]]['type'] = values[1]
+            if values[1] == 'Normal':
+               priors[values[0]]['object'] = normal_parameter(np.array(values[2].split(',')).astype('float64'))
+            elif values[1] == 'Uniform':
+               priors[values[0]]['object'] = uniform_parameter(np.array(values[2].split(',')).astype('float64'))
+            elif values[1] == 'Jeffreys':
+               priors[values[0]]['object'] = jeffreys_parameter(np.array(values[2].split(',')).astype('float64'))
+            elif values[1] == 'FIXED':
+               priors[values[0]]['object'] = constant_parameter(np.array(values[2].split(',')).astype('float64')[0])
+            if len(values)>=4:
+               priors[values[0]]['object'].set_value(np.float(values[3]))
     f.close()
     return priors
 
