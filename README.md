@@ -9,7 +9,7 @@ Author: Néstor Espinoza (nespino@astro.puc.cl)
 DEPENDENCIES
 ------------
 
-This code makes use of four important libraries:
+This code makes use of five important libraries:
 
     + Numpy.
     + Scipy.
@@ -17,6 +17,7 @@ This code makes use of four important libraries:
       -> http://astro.uchicago.edu/~kreidberg/batman/
     + emcee for MCMC sampling.
       -> http://dan.iel.fm/emcee/current/
+    + Astropy (for time conversions)
 
 All of them are open source and can be easily installed in any machine.
 
@@ -73,6 +74,12 @@ Next, you can modify the options in the exonailer.py code. The options are:
 
     rv_jitter:          If set to True, an extra 'jitter' term is added to the RVs error to account 
                         for stellar jitter.
+
+    transit_time_def:   Defines the input and output time scales (the times are assumed to be in the 
+                        JD format, i.e., JD, BJD, MDJ, etc.) of the transit times. If input transit times 
+                        are, for example, in utc and you want results in tdb, this has to be 'utc->tdb'.
+
+    rv_time_def:        Same as for transit times but for the times in the RVs.
 
 GENERATING THE PRIOR FILE
 -------------------------
