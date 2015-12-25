@@ -11,14 +11,14 @@ import numpy as np
 # Define the target name, detrending method and parameters of it:
 target = 'WASP-50-3'
 phot_noise_model = 'white'
-phot_detrend = None#'mfilter'
+phot_detrend = None
 window = 41
 
 # Define if you want to perform automatic outlier removal (sigma-clipping):
-phot_get_outliers = None#True
+phot_get_outliers = None
 
 # Define which transits you want to ommit (counted from first transit):
-n_ommit = []#[3,9]
+n_ommit = []
 
 # Define if you want to perform the resampling technique and in 
 # which phase range you want to perform such resampling. Additionally, 
@@ -37,16 +37,20 @@ mode = 'transit'
 rv_jitter = False
 
 # Define emcee parameters:
-nwalkers = 1000
-njumps = 500
-nburnin = 500
+nwalkers = 500
+njumps = 1500
+nburnin = 1500
+
+# Define time conversions:
+transit_time_def = 'utc->utc'
+rv_time_def = 'utc->utc'
 
 ################################################
 
 # ---------- DATA PRE-PROCESSING ------------- #
 
 # First, get the transit and RV data:
-t,f,f_err,t_rv,rv,rv_err = general_utils.read_data(target,mode)
+t,f,f_err,t_rv,rv,rv_err = general_utils.read_data(target,mode,transit_time_def,rv_time_def)
 
 # Initialize the parameters:
 parameters = general_utils.read_priors(target)

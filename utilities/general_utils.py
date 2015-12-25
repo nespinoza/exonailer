@@ -33,7 +33,17 @@ def read_priors(target,filename = None):
     f.close()
     return priors
 
-def read_data(target,mode):
+from astropy.time import Time as APYTime
+def convert_time(conv_string,t):
+    input_t,output_t = conv_string.split('->')
+    if input_t != output_t:
+        tobj = APYTime(t, format = 'jd', scale = input_t)
+        exec 'new_t = tobj.'+output_t+'.jd'
+        return new_t
+    else:
+        return t
+
+def read_data(target,mode,transit_time_def,rv_time_def):
     t,f,f_err = None,None,None
     t_rv,rv,rv_err = None,None,None
     if mode != 'rvs':
@@ -41,12 +51,15 @@ def read_data(target,mode):
             t,f,f_err = np.loadtxt('transit_data/'+target+'_lc.dat',unpack=True,usecols=(0,1,2))
         except:
             t,f = np.loadtxt('transit_data/'+target+'_lc.dat',unpack=True,usecols=(0,1))
+        # Convert transit times (if input and output are the same, does nothing):
+        t = convert_time(transit_time_def,t)
     if 'transit' not in mode:
         try:
             t_rv,rv,rv_err = np.loadtxt('rv_data/'+target+'_rvs.dat',unpack=True,usecols=(0,1,2))
         except:
             t_rv,rv = np.loadtxt('rv_data/'+target+'_rvs.dat',unpack=True,usecols=(0,1))
-        
+        # Convert RV times:
+        t_rv = convert_time(rv_time_def,t_rv)
     return t,f,f_err,t_rv,rv,rv_err
 
 import pickle,os
