@@ -86,11 +86,12 @@ def pre_process(t,f,f_err,detrend,get_outliers,n_ommit,window,parameters,ld_law,
     phases = get_phases(t,P,t0)
     # If outlier removal is on, remove them:
     if get_outliers:
-        model = get_transit_model(t,t0,P,p,a,inc,q1,q2,ld_law)
+        model = get_transit_model(t.astype('float64'),t0,P,p,a,inc,q1,q2,ld_law)
         # Get approximate transit duration in phase space:
         idx = np.where(model == 1.0)[0]
         phase_dur = np.abs(phases[idx][np.where(np.abs(phases[idx]) == \
                            np.min(np.abs(phases[idx])))])[0] + 0.01
+
         # Get precision:
         median_flux = np.median(f)
         sigma = get_sigma(f,median_flux)
@@ -503,7 +504,6 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
     # Now define parameters for emcee:
     ndim = len(theta_ml)
     pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
-    
     # Run the MCMC:
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob)
 
@@ -581,7 +581,7 @@ def plot_transit(t,f,parameters,ld_law,\
     plt.show()
 
 def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,resampling = False, \
-                        idx_resampling = [], texp = 0.01881944, N_resampling = 5):
+                        phase_max = 0.025, texp = 0.01881944, N_resampling = 5):
     # Extract parameters:
     P = parameters['P']['object'].value
     inc = parameters['inc']['object'].value
@@ -600,9 +600,35 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,resampling
     model_t = np.linspace(np.min(t),np.max(t),len(t)*100)
     model_phase = get_phases(model_t,P,t0)
 
-    # Generate model lightcurve and predicted one:
-    params,m = init_batman(model_t,law=ld_law)
-    params2,m2 = init_batman(t,law=ld_law)
+    # Initialize the parameters of the transit model, 
+    # and prepare resampling data if resampling is True:
+    if resampling:
+        idx_resampling = np.where((model_phase>-phase_max)&(model_phase<phase_max))[0]
+        t_resampling = np.array([])
+        for i in range(len(idx_resampling)):
+            t_resampling = np.append(t_resampling, \
+                                     np.linspace(model_t[idx_resampling[i]]-(texp/2.0),\
+                                     model_t[idx_resampling[i]]+(texp/2.0),\
+                                     N_resampling))
+
+        idx_resampling_pred = np.where((phases>-phase_max)&(phases<phase_max))[0]
+        t_resampling_pred = np.array([])
+        for i in range(len(idx_resampling_pred)):
+            t_resampling_pred = np.append(t_resampling_pred, \
+                                     np.linspace(t[idx_resampling_pred[i]]-(texp/2.0),\
+                                     t[idx_resampling_pred[i]]+(texp/2.0),\
+                                     N_resampling))
+        params,m = init_batman(t_resampling, law=ld_law)
+        params2,m2 = init_batman(t_resampling_pred, law=ld_law)
+        transit_flat = np.ones(len(model_t))
+        transit_flat[idx_resampling] = np.zeros(len(idx_resampling))
+        transit_flat_pred = np.ones(len(t))
+        transit_flat_pred[idx_resampling_pred] = np.zeros(len(idx_resampling_pred))
+
+    else:
+        params,m = init_batman(model_t,law=ld_law)
+        params2,m2 = init_batman(t,law=ld_law)
+
     coeff1,coeff2 = reverse_ld_coeffs(ld_law, q1, q2)
     params.t0 = t0
     params.per = P
@@ -610,8 +636,21 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,resampling
     params.a = a
     params.inc = inc
     params.u = [coeff1,coeff2]
-    model_lc = m.light_curve(params)
-    model_pred = m2.light_curve(params)
+
+    # Generate model and predicted lightcurves:
+    if resampling:
+        model = m.light_curve(params)
+        for i in range(len(idx_resampling)):
+            transit_flat[idx_resampling[i]] = np.mean(model[i*N_resampling:N_resampling*(i+1)])
+        model_lc = transit_flat
+
+        model = m2.light_curve(params)
+        for i in range(len(idx_resampling_pred)):
+            transit_flat_pred[idx_resampling_pred[i]] = np.mean(model[i*N_resampling:N_resampling*(i+1)])
+        model_pred = transit_flat_pred
+    else:
+        model_lc = m.light_curve(params)
+        model_pred = m2.light_curve(params)
 
     # Now plot:
     plt.style.use('ggplot')

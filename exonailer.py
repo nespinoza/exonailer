@@ -9,7 +9,7 @@ import numpy as np
 ################# OPTIONS ######################
 
 # Define the target name, detrending method and parameters of it:
-target = 'WASP-50-3'
+target = 'HATS-5-20151227'
 phot_noise_model = 'white'
 phot_detrend = None
 window = 41
@@ -88,4 +88,6 @@ else:
 if mode == 'transit':
     transit_utils.plot_transit(t,f,parameters,ld_law)
 elif mode == 'full':
-    transit_utils.plot_transit_and_rv(t,f,t_rv,rv,rv_err,parameters,ld_law,rv_jitter)
+    transit_utils.plot_transit_and_rv(t,f,t_rv,rv,rv_err,parameters,ld_law,rv_jitter, \
+                                      resampling = resampling, phase_max = phase_max, \
+                                      N_resampling=N_resampling)
