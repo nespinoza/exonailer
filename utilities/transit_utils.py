@@ -182,6 +182,7 @@ def reverse_ld_coeffs(ld_law, q1, q2):
 import emcee
 import Wavelets
 import scipy.optimize as op
+import ajplanet as rv_model
 def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                        parameters, ld_law, mode, rv_jitter = False, \
                        njumps = 500, nburnin = 500, nwalkers = 100, noise_model = 'white',\
@@ -267,10 +268,11 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         if resampling:
            t_resampling = np.array([])
            for i in range(len(idx_resampling)):
-               t_resampling = np.append(t_resampling, \
-                                        np.linspace(xt[idx_resampling[i]]-(texp/2.0),\
-                                        xt[idx_resampling[i]]+(texp/2.0),\
-                                        N_resampling))
+               tij = np.zeros(N_resampling)
+               for j in range(1,N_resampling+1):
+                   # Eq (35) in Kipping (2010)    
+                   tij[j-1] = xt[idx_resampling[i]] + ((j - ((N_resampling+1)/2.))*(texp/np.double(N_resampling)))
+               t_resampling = np.append(t_resampling, np.copy(tij))
 
            params,m = init_batman(t_resampling,law=ld_law)
            transit_flat = np.ones(len(xt))
@@ -292,9 +294,22 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
     # Initialize the variable names:
     transit_params = ['P','t0','a','p','inc','sigma_w','sigma_r','q1','q2']
     rv_params = ['mu','K','sigma_w_rv']
+    common_params = ['ecc','omega']
 
     # Create lists that will save parameters to check the limits on and:
     parameters_to_check = []
+
+    # Check common parameters:
+    if parameters['ecc']['type'] == 'FIXED':
+       common_params.pop(common_params.index('ecc'))
+    elif parameters['ecc']['type'] in ['Uniform','Jeffreys']:
+       parameters_to_check.append('ecc')
+
+    if parameters['omega']['type'] == 'FIXED':
+       common_params.pop(common_params.index('omega'))
+    elif parameters['omega']['type'] in ['Uniform','Jeffreys']:
+       parameters_to_check.append('omega')
+
 
     # Eliminate from the parameter list parameters that are being fixed:
     if mode != 'rv':
@@ -346,7 +361,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         if parameters['K']['type'] == 'FIXED':
             rv_params.pop(rv_params.index('K'))
         elif parameters['K']['type'] in ['Uniform','Jeffreys']:
-            parameters_to_check.append('K')
+            parameters_to_check.append('K')         
         if parameters['sigma_w_rv']['type'] == 'FIXED':
             rv_params.pop(rv_params.index('sigma_w_rv'))       
         elif parameters['sigma_w_rv']['type'] in ['Uniform','Jeffreys']:
@@ -356,13 +371,13 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
             rv_params.pop(rv_params.index('sigma_w_rv'))
 
     if mode == 'transit':
-       all_mcmc_params = transit_params 
+       all_mcmc_params = transit_params + common_params
     elif mode == 'rv':
-       all_mcmc_params = rv_params
+       all_mcmc_params = rv_params + common_params
     elif mode == 'transit_noise':
        all_mcmc_params = ['sigma_w','sigma_r']
     else:
-       all_mcmc_params = transit_params + rv_params
+       all_mcmc_params = transit_params + rv_params + common_params
 
     n_params = len(all_mcmc_params)
     log2pi = np.log(2.*np.pi)
@@ -407,8 +422,8 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         params.rp = parameters['p']['object'].value
         params.a = parameters['a']['object'].value
         params.inc = parameters['inc']['object'].value
-        params.ecc = 0.0
-        params.w = 90.0
+        params.ecc = parameters['ecc']['object'].value
+        params.w = parameters['omega']['object'].value
         params.u = [coeff1,coeff2]
         model = m.light_curve(params)
         if resampling:
@@ -426,9 +441,12 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         return log_like
 
     def lnlike_rv():
-        model = parameters['mu']['object'].value - \
-                parameters['K']['object'].value*\
-                np.sin(2.*np.pi*(xrv-parameters['t0']['object'].value)/parameters['P']['object'].value)
+        model = rv_model.pl_rv_array(xrv,parameters['mu']['object'].value,parameters['K']['object'].value,\
+                        parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
+                        parameters['t0']['object'].value,parameters['P']['object'].value)
+        #model = parameters['mu']['object'].value - \
+        #        parameters['K']['object'].value*\
+        #        np.sin(2.*np.pi*(xrv-parameters['t0']['object'].value)/parameters['P']['object'].value)
         residuals = (yrv-model)
         taus = 1.0/((yerrrv)**2 + (parameters['sigma_w_rv']['object'].value)**2)
         log_like = -0.5*(n_data_rvs*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
@@ -519,7 +537,8 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
 
 import matplotlib.pyplot as plt
 def plot_transit(t,f,parameters,ld_law,\
-                 resampling = False, idx_resampling = [], texp = 0.01881944, N_resampling = 5):
+                 resampling = False, phase_max = 0.025, \
+                 idx_resampling_pred = [], texp = 0.01881944, N_resampling = 5):
         
     # Extract transit parameters:
     P = parameters['P']['object'].value
@@ -537,38 +556,59 @@ def plot_transit(t,f,parameters,ld_law,\
     model_t = np.linspace(np.min(t),np.max(t),len(t)*100)
     model_phase = get_phases(model_t,P,t0)
 
-    # Generate model lightcurve and predicted one:
-    params,m = init_batman(model_t,law=ld_law)
+    # Initialize the parameters of the transit model, 
+    # and prepare resampling data if resampling is True:
     if resampling:
-       t_resampling = np.array([])
-       for i in range(len(idx_resampling)):
-           t_resampling = np.append(t_resampling, \
-                                    np.linspace(t[idx_resampling[i]]-(texp/2.0),\
-                                    t[idx_resampling[i]]+(texp/2.0),\
-                                    N_resampling))
+        idx_resampling = np.where((model_phase>-phase_max)&(model_phase<phase_max))[0]
+        t_resampling = np.array([])
+        for i in range(len(idx_resampling)):
+            tij = np.zeros(N_resampling)
+            for j in range(1,N_resampling+1):
+                # Eq (35) in Kipping (2010)    
+                tij[j-1] = model_t[idx_resampling[i]] + ((j - ((N_resampling+1)/2.))*(texp/np.double(N_resampling)))
+            t_resampling = np.append(t_resampling, np.copy(tij))
 
-       params,m = init_batman(t_resampling,law=ld_law)
-       transit_flat = np.ones(len(xt))
-       transit_flat[idx_resampling] = np.zeros(len(idx_resampling))
-       params2,m2 = init_batman(t_resampling,law=ld_law)
+        #idx_resampling_pred = np.where((phases>-phase_max)&(phases<phase_max))[0]
+        t_resampling_pred = np.array([])
+        for i in range(len(idx_resampling_pred)):
+            tij = np.zeros(N_resampling)
+            for j in range(1,N_resampling+1):
+                tij[j-1] = t[idx_resampling_pred[i]] + ((j - ((N_resampling+1)/2.))*(texp/np.double(N_resampling)))
+            t_resampling_pred = np.append(t_resampling_pred, np.copy(tij))
+        params,m = init_batman(t_resampling, law=ld_law)
+        params2,m2 = init_batman(t_resampling_pred, law=ld_law)
+        transit_flat = np.ones(len(model_t))
+        transit_flat[idx_resampling] = np.zeros(len(idx_resampling))
+        transit_flat_pred = np.ones(len(t))
+        transit_flat_pred[idx_resampling_pred] = np.zeros(len(idx_resampling_pred))
+
     else:
-       params2,m2 = init_batman(t,law=ld_law)
+        params,m = init_batman(model_t,law=ld_law)
+        params2,m2 = init_batman(t,law=ld_law)
+    #####################################################################
 
     coeff1,coeff2 = reverse_ld_coeffs(ld_law, q1, q2)
     params.t0 = t0
     params.per = P
     params.rp = p
-    params.a = a 
+    params.a = a
     params.inc = inc
     params.u = [coeff1,coeff2]
-    model_lc = m.light_curve(params)
-    if resampling:  
-       model = m2.light_curve(params)
-       for i in range(len(idx_resampling)):
-           transit_flat[idx_resampling[i]] = np.mean(model[i*N_resampling:N_resampling*(i+1)])
-       model_pred = transit_flat
+
+    # Generate model and predicted lightcurves:
+    if resampling:
+        model = m.light_curve(params)
+        for i in range(len(idx_resampling)):
+            transit_flat[idx_resampling[i]] = np.mean(model[i*N_resampling:N_resampling*(i+1)])
+        model_lc = transit_flat
+
+        model = m2.light_curve(params)
+        for i in range(len(idx_resampling_pred)):
+            transit_flat_pred[idx_resampling_pred[i]] = np.mean(model[i*N_resampling:N_resampling*(i+1)])
+        model_pred = transit_flat_pred
     else:
-       model_pred = m2.light_curve(params)
+        model_lc = m.light_curve(params)
+        model_pred = m2.light_curve(params)
 
     # Now plot:
     plt.style.use('ggplot')
@@ -577,7 +617,7 @@ def plot_transit(t,f,parameters,ld_law,\
     idx = np.argsort(model_phase)
     plt.plot(phases,f,'.',color='black',alpha=0.4)
     plt.plot(model_phase[idx],model_lc[idx])
-    plt.plot(phases,(f-model_pred) + (1-1.4*p**2),'.',color='black',alpha=0.4)
+    plt.plot(phases,(f-model_pred) + (1-2.5*p**2),'.',color='black',alpha=0.4)
     plt.show()
 
 def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,resampling = False, \
@@ -592,6 +632,8 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,resampling
     q2 = parameters['q2']['object'].value
     mu = parameters['mu']['object'].value
     K = parameters['K']['object'].value
+    ecc = parameters['ecc']['object'].value
+    omega = parameters['omega']['object'].value
 
     # Get data phases:
     phases = get_phases(t,P,t0)
@@ -606,18 +648,19 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,resampling
         idx_resampling = np.where((model_phase>-phase_max)&(model_phase<phase_max))[0]
         t_resampling = np.array([])
         for i in range(len(idx_resampling)):
-            t_resampling = np.append(t_resampling, \
-                                     np.linspace(model_t[idx_resampling[i]]-(texp/2.0),\
-                                     model_t[idx_resampling[i]]+(texp/2.0),\
-                                     N_resampling))
+            tij = np.zeros(N_resampling)
+            for j in range(1,N_resampling+1):
+                # Eq (35) in Kipping (2010)    
+                tij[j-1] = model_t[idx_resampling[i]] + ((j - ((N_resampling+1)/2.))*(texp/np.double(N_resampling)))
+            t_resampling = np.append(t_resampling, np.copy(tij))    
 
         idx_resampling_pred = np.where((phases>-phase_max)&(phases<phase_max))[0]
         t_resampling_pred = np.array([])
         for i in range(len(idx_resampling_pred)):
-            t_resampling_pred = np.append(t_resampling_pred, \
-                                     np.linspace(t[idx_resampling_pred[i]]-(texp/2.0),\
-                                     t[idx_resampling_pred[i]]+(texp/2.0),\
-                                     N_resampling))
+            tij = np.zeros(N_resampling)
+            for j in range(1,N_resampling+1):
+                tij[j-1] = t[idx_resampling_pred[i]] + ((j - ((N_resampling+1)/2.))*(texp/np.double(N_resampling)))
+            t_resampling_pred = np.append(t_resampling_pred, np.copy(tij))
         params,m = init_batman(t_resampling, law=ld_law)
         params2,m2 = init_batman(t_resampling_pred, law=ld_law)
         transit_flat = np.ones(len(model_t))
@@ -635,6 +678,8 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,resampling
     params.rp = p
     params.a = a
     params.inc = inc
+    params.ecc = ecc
+    params.omega = omega
     params.u = [coeff1,coeff2]
 
     # Generate model and predicted lightcurves:
@@ -665,7 +710,7 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,resampling
     plt.subplot(212)
     plt.ylabel('Radial velocity (m/s)')
     plt.xlabel('Phase')
-    model_rv = mu - K*np.sin(2.*np.pi*model_phase)
+    model_rv = rv_model.pl_rv_array(model_t,mu,K,omega*np.pi/180.,ecc,t0,P)
     rv_phases = get_phases(trv,P,t0)
     plt.errorbar(rv_phases,(rv-mu)*1e3,yerr=rv_err*1e3,fmt='o')
     plt.plot(model_phase[idx],(model_rv[idx]-mu)*1e3)
