@@ -159,7 +159,7 @@ def convert_ld_coeffs(ld_law, coeff1, coeff2):
     if ld_law == 'quadratic':
         q1 = (coeff1 + coeff2)**2
         q2 = coeff1/(2.*(coeff1+coeff2))
-    elif ld_law=='square-root':
+    elif ld_law=='squareroot':
         q1 = (coeff1 + coeff2)**2
         q2 = coeff2/(2.*(coeff1+coeff2))
     elif ld_law=='logarithmic':
@@ -171,7 +171,7 @@ def reverse_ld_coeffs(ld_law, q1, q2):
     if ld_law == 'quadratic':
         coeff1 = 2.*np.sqrt(q1)*q2
         coeff2 = np.sqrt(q1)*(1.-2.*q2)
-    elif ld_law=='square-root':
+    elif ld_law=='squareroot':
         coeff1 = np.sqrt(q1)*(1.-2.*q2)
         coeff2 = 2.*np.sqrt(q1)*q2
     elif ld_law=='logarithmic':
@@ -507,34 +507,52 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
     else:
         print 'Mode not supported. Doing nothing.'
 
-    # Start at the maximum likelihood value:
-    nll = lambda *args: -lnprob(*args)
+    # If already not done, get posterior samples:
+    if len(parameters[all_mcmc_params[0]]['object'].posterior) == 0:
+        # Extract initial input values of the parameters to be fitted:
+        theta_0 = []
+        for i in range(n_params):
+            theta_0.append(parameters[all_mcmc_params[i]]['object'].value)
 
-    # Extract initial input values of the parameters to be fitted:
-    theta_0 = []
-    for i in range(n_params):
-        theta_0.append(parameters[all_mcmc_params[i]]['object'].value)
+        # Start at the maximum likelihood value:
+        nll = lambda *args: -lnprob(*args)
 
-    # Get ML estimate:
-    result = op.minimize(nll, theta_0)
-    theta_ml = result["x"]
+        # Get ML estimate:
+        result = op.minimize(nll, theta_0)
+        theta_ml = result["x"]
 
-    # Now define parameters for emcee:
-    ndim = len(theta_ml)
-    pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
-    # Run the MCMC:
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob)
+        # Now define parameters for emcee:
+        ndim = len(theta_ml)
+        pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
+        # Run the MCMC:
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob)
 
-    sampler.run_mcmc(pos, njumps+nburnin)
+        sampler.run_mcmc(pos, njumps+nburnin)
 
-    # Save the parameter chains for the parameters that were actually varied:
-    for i in range(n_params):
-        c_param = all_mcmc_params[i]
-        c_p_chain = np.array([])
-        for walker in range(nwalkers):
-            c_p_chain = np.append(c_p_chain,sampler.chain[walker,nburnin:,i])
-        parameters[c_param]['object'].set_posterior(np.copy(c_p_chain))
+        # Save the parameter chains for the parameters that were actually varied:
+        for i in range(n_params):
+            c_param = all_mcmc_params[i]
+            c_p_chain = np.array([])
+            for walker in range(nwalkers):
+                c_p_chain = np.append(c_p_chain,sampler.chain[walker,nburnin:,i])
+            parameters[c_param]['object'].set_posterior(np.copy(c_p_chain))
 
+    # When done or if MCMC already performed, calculate information criterions. First,
+    # save current values of the parameters obtained by MCMC (which are the medians) 
+    # and calculate AIC and BIC:
+    initial_values = {}
+    for i in range(len(all_mcmc_params)):
+        initial_values[all_mcmc_params[i]] = parameters[all_mcmc_params[i]]['object'].value
+
+    lnlike = lnlike_rv()
+    npars = 5.
+    AIC = 2.*npars - 2.*lnlike
+    print '\t Information criterions:'
+    print '\t AIC: ',AIC
+    AICc = AIC + (2.*npars*(npars+1.0))/(n_data_rvs-npars-1.)
+    print '\t AICc: ',AICc
+    BIC = -2.*lnlike + npars*np.log(n_data_rvs)
+    print '\t BIC: ',BIC
 import matplotlib.pyplot as plt
 def plot_transit(t,f,parameters,ld_law,\
                  resampling = False, phase_max = 0.025, \
