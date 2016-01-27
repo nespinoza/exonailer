@@ -159,8 +159,6 @@ TODO
 
     + Automated TTV analysis.
 
-    + RV models with eccentric solutions.
-
     + Transit and RVs for multi-planet systems.
 
     + Noise models for RVs.
