@@ -11,22 +11,22 @@ DEPENDENCIES
 
 This code makes use of six important libraries:
 
-    + **Numpy**.
-    + **Scipy**.
-    + **The Bad-Ass Transit Model cAlculatioN (batman) for transit modelling**.
-      -> http://astro.uchicago.edu/~kreidberg/batman/
-    + **emcee for MCMC sampling**.
-      -> http://dan.iel.fm/emcee/current/
-    + **Astropy for time conversions**.
-      -> www.astropy.org
+- **Numpy**.
+- **Scipy**.
+- **The Bad-Ass Transit Model cAlculatioN (batman) for transit modelling**.
+  -> http://astro.uchicago.edu/~kreidberg/batman/
+- **emcee for MCMC sampling**.
+  -> http://dan.iel.fm/emcee/current/
+- **Astropy for time conversions**.
+  -> www.astropy.org
 
 All of them are open source and can be easily installed in any machine. Be 
 sure to install them before running the installer (see below), otherwise, it 
 will complain. This code also makes use of the `ajplanet` module for 
 radial-velocity modelling (https://github.com/andres-jordan/ajplanet) and the 
-`flicker-noise` module, for modelling 1/f noise. Copies of the source codes 
-of those modules are included in this repository and will be installed automatically 
-anyways.
+`flicker-noise` module (https://github.com/nespinoza/flicker-noise), for modelling 
+1/f noise. Copies of the source codes of those modules are included in this repository 
+and will be installed automatically anyways.
 
 INSTALL
 -------
