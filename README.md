@@ -9,17 +9,28 @@ Author: Néstor Espinoza (nespino@astro.puc.cl)
 DEPENDENCIES
 ------------
 
-This code makes use of five important libraries:
+This code makes use of six important libraries:
 
     + Numpy.
     + Scipy.
     + The Bad-Ass Transit Model cAlculatioN (batman) for transit modelling.
       -> http://astro.uchicago.edu/~kreidberg/batman/
+    + ajplanet for radial-velocity modelling.
+      -> https://github.com/andres-jordan/ajplanet
     + emcee for MCMC sampling.
       -> http://dan.iel.fm/emcee/current/
     + Astropy (for time conversions)
 
-All of them are open source and can be easily installed in any machine.
+All of them are open source and can be easily installed in any machine. In 
+any case, the installer (see below) downloads all of these codes for you, so 
+you don't have to waste time searching for them and putting them in the 
+right directories!
+
+INSTALL
+-------
+To install the code, simply run the `install.py` code by doing:
+    python install.py
+After this is done, the code will be ready to use!
 
 USAGE
 -----
