@@ -13,12 +13,9 @@ This code makes use of six important libraries:
 
 - **Numpy**.
 - **Scipy**.
-- **The Bad-Ass Transit Model cAlculatioN (batman) for transit modelling**.
-  -> http://astro.uchicago.edu/~kreidberg/batman/
-- **emcee for MCMC sampling**.
-  -> http://dan.iel.fm/emcee/current/
-- **Astropy for time conversions**.
-  -> www.astropy.org
+- **The Bad-Ass Transit Model cAlculatioN (batman) for transit modelling** (http://astro.uchicago.edu/~kreidberg/batman/).
+- **emcee for MCMC sampling** (http://dan.iel.fm/emcee/current/)
+- **Astropy for time conversions** (http://www.astropy.org)
 
 All of them are open source and can be easily installed in any machine. Be 
 sure to install them before running the installer (see below), otherwise, it 
@@ -31,7 +28,9 @@ and will be installed automatically anyways.
 INSTALL
 -------
 To install the code, simply run the `install.py` code by doing:
+
     python install.py
+
 After this is done, the code will be ready to use!
 
 USAGE
