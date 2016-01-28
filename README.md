@@ -54,7 +54,7 @@ To use the code is very simple. Suppose we have a target that we named
 
 Next, you can modify the options in the exonailer.py code. The options are:
 
-    target:             The name of your target (in this case, `TARGET-001`).
+    target:             The name of your target (in this case, `my_lightcurve`).
 
     phot_noise_model:   This parameter defines the noise model used for the photometry. If set 
                         to 'white', it assumes the underlying noise is white-noise. If set to 
