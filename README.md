@@ -135,10 +135,11 @@ The mandatory variables that must have some of the above defined priors are:
     sigma_w:        Standard-deviation of the underlying white noise process giving rise to 
                     the observed noise (in ppm).
 
-    ecc:            Eccentricity of the orbit (can be fixed to 0).
+    ecc:            Eccentricity of the orbit.
 
     omega:          Argument of periapsis (in degrees)
 
+Of course, e.g., for a circular fit, you might want to fix `ecc` (to 0) and `omega` (e.g., to 90). 
 The optional variables are:
 
     K:              Radial-velocity semi-amplitude.
