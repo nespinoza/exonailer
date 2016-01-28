@@ -37,16 +37,16 @@ USAGE
 -----
 
 To use the code is very simple. Suppose we have a target that we named 
-`my_lightcurve`:
+`my_data`:
 
-    1. Put the photometry under `transit_data/my_lightcurve_lc.dat`. Similarly, 
-       put the RVs (if you have any) under `rv_data/my_lightcurve_rvs.dat`. These 
+    1. Put the photometry under `transit_data/my_data_lc.dat`. Similarly, 
+       put the RVs (if you have any) under `rv_data/my_data_rvs.dat`. These 
        are expected to have three columns: times, data and error; however, if you 
        put only two is ok: the code will recognize that you don't have errors on 
        your variables. The flux is expected to be normalized to 1. The RVs are expected 
        to be in km/s.
 
-    2. Create a prior file under `priors_data/my_lightcurve_priors.dat`. The code 
+    2. Create a prior file under `priors_data/my_data_priors.dat`. The code 
        expects this file to have three columns: the parameter name, the prior 
        type and the hyperparameters of the prior separated by commas (see below). 
        If you want a parameter to be fixed, put `FIXED` on the Prior Type column 
@@ -54,7 +54,7 @@ To use the code is very simple. Suppose we have a target that we named
 
 Next, you can modify the options in the exonailer.py code. The options are:
 
-    target:             The name of your target (in this case, `my_lightcurve`).
+    target:             The name of your target (in this case, `my_data`).
 
     phot_noise_model:   This parameter defines the noise model used for the photometry. If set 
                         to 'white', it assumes the underlying noise is white-noise. If set to 
