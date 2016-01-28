@@ -9,13 +9,13 @@ Author: Néstor Espinoza (nespino@astro.puc.cl)
 DEPENDENCIES
 ------------
 
-This code makes use of six important libraries:
+This code makes use of five important libraries:
 
 - **Numpy**.
 - **Scipy**.
 - **The Bad-Ass Transit Model cAlculatioN (batman) for transit modelling** (http://astro.uchicago.edu/~kreidberg/batman/).
-- **emcee for MCMC sampling** (http://dan.iel.fm/emcee/current/)
-- **Astropy for time conversions** (http://www.astropy.org)
+- **emcee for MCMC sampling** (http://dan.iel.fm/emcee/current/).
+- **Astropy for time conversions** (http://www.astropy.org).
 
 All of them are open source and can be easily installed in any machine. Be 
 sure to install them before running the installer (see below), otherwise, it 
