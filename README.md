@@ -135,9 +135,17 @@ The mandatory variables that must have some of the above defined priors are:
     sigma_w:        Standard-deviation of the underlying white noise process giving rise to 
                     the observed noise (in ppm).
 
-    mu:             Systematic radial velocity.
+    ecc:            Eccentricity of the orbit (can be fixed to 0).
+
+    omega:          Argument of periapsis (in degrees)
+
+The optional variables are:
 
     K:              Radial-velocity semi-amplitude.
+    
+    sigma_w_rv      Jitter term for radial-velocities (see below).
+
+    sigma_r         Parameter for 1/f noise (see below).
 
 If in the options of the exonailer.py code you set phot_noise_model to '1/f', then you 
 must also define a sigma_r parameter (see Carter & Winn, 2009). If you set rv_jitter to 
