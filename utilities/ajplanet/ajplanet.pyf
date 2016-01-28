@@ -1,0 +1,107 @@
+
+python module ajplanet
+interface 
+   subroutine pl_Rconvolv(y,ys,num,st,dw,R)
+       intent (c) pl_Rconvolv
+       intent (c)
+
+       integer intent(hide),depend(y) :: num=len(y)
+
+       double precision intent(in) :: y(num)
+       double precision intent(out) :: ys(num)
+       double precision intent(in) :: st
+       double precision intent(in) :: dw
+       double precision intent(in) :: R
+   end subroutine pl_Rconvolv
+   subroutine pl_convolv(y,ys,num,st,dw,vsini,u)
+       intent (c) pl_convolv
+       intent (c)
+
+       integer intent(hide),depend(y) :: num=len(y)
+
+       double precision intent(in) :: y(num)
+       double precision intent(out) :: ys(num)
+       double precision intent(in) :: st
+       double precision intent(in) :: dw
+       double precision intent(in) :: vsini
+       double precision intent(in) :: u
+   end subroutine pl_convolv
+   double precision function pl_rv(t,v0,K,w,e,t0,P)
+       intent(c) pl_rv
+       intent(c)
+
+       double precision intent(in) :: t
+       double precision intent(in) :: v0
+       double precision intent(in) :: K
+       double precision intent(in) :: w
+       double precision intent(in) :: e
+       double precision intent(in) :: t0
+       double precision intent(in) :: P
+   end function pl_rv
+   subroutine pl_rv_array(t,v0,K,w,e,t0,P,n,res)
+       intent(c) pl_rv_array
+       intent(c)
+
+       integer intent(hide),depend(t) :: n=len(t)
+
+       double precision intent(in) :: t(n)
+       double precision intent(in) :: v0
+       double precision intent(in) :: K
+       double precision intent(in) :: w
+       double precision intent(in) :: e
+       double precision intent(in) :: t0
+       double precision intent(in) :: P
+       double precision intent(out) :: res(n)
+   end subroutine pl_rv_array	
+   subroutine pl_Orbit_array(t,t0,P,a,e,w,inc,Omega,x,y,z,n)
+       intent(c) pl_Orbit_array
+       intent(c)
+
+       integer intent(hide),depend(t) :: n=len(t)
+
+       double precision intent(in) :: t(n)
+       double precision intent(in) :: t0
+       double precision intent(in) :: P
+       double precision intent(in) :: a
+       double precision intent(in) :: e
+       double precision intent(in) :: w
+       double precision intent(in) :: inc
+       double precision intent(in) :: Omega
+       double precision intent(out) :: x(n)
+       double precision intent(out) :: y(n)
+       double precision intent(out) :: z(n)
+  end subroutine pl_Orbit_array
+  subroutine occultquad(z0,u1,u2,p,muo1,mu0,nz)
+
+       integer intent(hide),depend(z0) :: nz=len(z0)
+
+       double precision intent(in) :: z0(nz)
+       double precision intent(in) :: u1
+       double precision intent(in) :: u2
+       double precision intent(in) :: p
+       double precision intent(out) :: muo1(nz)
+       double precision intent(out) :: mu0(nz)
+  end subroutine occultquad
+  subroutine occultnl(rl,c1,c2,c3,c4,b0,mulimb0,mulimbf,nb)
+
+       integer intent(hide),depend(b0) :: nb=len(b0)
+       double precision intent(in) :: rl
+       double precision intent(in) :: c1
+       double precision intent(in) :: c2
+       double precision intent(in) :: c3
+       double precision intent(in) :: c4
+       double precision intent(in) :: b0(nb)
+       double precision intent(out) :: mulimb0(nb)
+       double precision intent(out) :: mulimbf(nb,5)
+   end subroutine occultnl
+   function pl_true_anomaly(t,t0,e,P)
+       intent (c) pl_true_anomaly
+       intent (c)
+
+       double precision :: t
+       double precision :: t0
+       double precision :: e
+       double precision :: P       
+   end function pl_true_anomaly
+end interface
+end python module ajplanet
