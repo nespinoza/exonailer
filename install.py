@@ -66,7 +66,6 @@ def CheckLibraries():
 def Build(directory):
     # We obtain al files and folders of the current directory...
     files_and_folders = glob.glob(directory+'/*')
-    print files_and_folders
     CFileFound = False
     SetupFileFound = False
     # ...and we check each folder or file:
