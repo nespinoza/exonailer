@@ -444,9 +444,6 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         model = rv_model.pl_rv_array(xrv,parameters['mu']['object'].value,parameters['K']['object'].value,\
                         parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
                         parameters['t0']['object'].value,parameters['P']['object'].value)
-        #model = parameters['mu']['object'].value - \
-        #        parameters['K']['object'].value*\
-        #        np.sin(2.*np.pi*(xrv-parameters['t0']['object'].value)/parameters['P']['object'].value)
         residuals = (yrv-model)
         taus = 1.0/((yerrrv)**2 + (parameters['sigma_w_rv']['object'].value)**2)
         log_like = -0.5*(n_data_rvs*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
@@ -537,9 +534,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                 c_p_chain = np.append(c_p_chain,sampler.chain[walker,nburnin:,i])
             parameters[c_param]['object'].set_posterior(np.copy(c_p_chain))
 
-    # When done or if MCMC already performed, calculate information criterions. First,
-    # save current values of the parameters obtained by MCMC (which are the medians) 
-    # and calculate AIC and BIC:
+    # When done or if MCMC already performed, save results:
     initial_values = {}
     for i in range(len(all_mcmc_params)):
         initial_values[all_mcmc_params[i]] = parameters[all_mcmc_params[i]]['object'].value
