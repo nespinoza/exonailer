@@ -23,10 +23,10 @@ will complain. This code also makes use of the `ajplanet` module for
 radial-velocity modelling (https://github.com/andres-jordan/ajplanet) and the 
 `flicker-noise` module (https://github.com/nespinoza/flicker-noise), for modelling 
 1/f noise. Copies of the source codes of those modules are included in this repository 
-and will be installed automatically anyways.
+and will be installed automatically.
 
-INSTALL
--------
+INSTALLATION
+------------
 To install the code, simply run the `install.py` code by doing:
 
     python install.py
