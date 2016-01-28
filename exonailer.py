@@ -9,7 +9,7 @@ import numpy as np
 ################# OPTIONS ######################
 
 # Define the target name, detrending method and parameters of it:
-target = 'HATS-5-20151227'
+target = 'my_lightcurve'
 phot_noise_model = 'white'
 phot_detrend = None
 window = 41
@@ -38,8 +38,8 @@ rv_jitter = False
 
 # Define emcee parameters:
 nwalkers = 500
-njumps = 1500
-nburnin = 1500
+njumps = 500
+nburnin = 500
 
 # Define time conversions:
 transit_time_def = 'utc->utc'
