@@ -544,15 +544,6 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
     for i in range(len(all_mcmc_params)):
         initial_values[all_mcmc_params[i]] = parameters[all_mcmc_params[i]]['object'].value
 
-    lnlike = lnlike_rv()
-    npars = 5.
-    AIC = 2.*npars - 2.*lnlike
-    print '\t Information criterions:'
-    print '\t AIC: ',AIC
-    AICc = AIC + (2.*npars*(npars+1.0))/(n_data_rvs-npars-1.)
-    print '\t AICc: ',AICc
-    BIC = -2.*lnlike + npars*np.log(n_data_rvs)
-    print '\t BIC: ',BIC
 import matplotlib.pyplot as plt
 def plot_transit(t,f,parameters,ld_law,\
                  resampling = False, phase_max = 0.025, \
