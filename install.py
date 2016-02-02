@@ -128,6 +128,19 @@ def Build(directory):
 def getDirs(foldername):
     return os.walk(foldername).next()[1]
 
+def spaced(input,space):
+    fixed = False
+    i = 0
+    input = space+input
+    while(not fixed):
+        if(input[i:i+1] == '\n'):
+           input = input[0:i+1]+space+input[i+1:]
+           i = i + len(space)
+        i = i + 1
+        if(i == len(input)-1):
+          fixed = True
+    return input
+
 CheckLibraries()
 Build('utilities/ajplanet')
 Build('utilities/flicker-noise')
