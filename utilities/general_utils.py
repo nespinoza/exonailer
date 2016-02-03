@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import numpy as np
 
 def read_priors(target,filename = None):
@@ -44,23 +45,45 @@ def convert_time(conv_string,t):
         return t
 
 def read_data(target,mode,transit_time_def,rv_time_def):
-    t,f,f_err = None,None,None
+    t_tr,f,f_err = None,None,None
     t_rv,rv,rv_err = None,None,None
     if mode != 'rvs':
-        try:
-            t,f,f_err = np.loadtxt('transit_data/'+target+'_lc.dat',unpack=True,usecols=(0,1,2))
-        except:
-            t,f = np.loadtxt('transit_data/'+target+'_lc.dat',unpack=True,usecols=(0,1))
+        # Read in transit data:
+        transit_data = np.genfromtxt('transit_data/'+target+'_lc.dat',dtype='|S15')
+        # Get times and fluxes:
+        t_tr = transit_data[:,0].astype('float')
+        f = transit_data[:,1].astype('float')
+        # If more than four columns, assume fourth is instrument name, if only three, 
+        # assume only errors are passed. If only two, fill instrument name with generic name:
+        if transit_data.shape[1]>=4:
+            f_err = transit_data[:,2].astype('float')
+            transit_instruments = transit_data[:,3]
+        elif transit_data.shape[1] == 3:
+            f_err = transit_data[:,2].astype('float')
+            transit_instruments = np.array(len(t_tr)*['instrument'])
+        else:
+            transit_instruments = np.array(len(t_tr)*['instrument'])
         # Convert transit times (if input and output are the same, does nothing):
-        t = convert_time(transit_time_def,t)
+        t_tr = convert_time(transit_time_def,t_tr)
     if 'transit' not in mode:
-        try:
-            t_rv,rv,rv_err = np.loadtxt('rv_data/'+target+'_rvs.dat',unpack=True,usecols=(0,1,2))
-        except:
-            t_rv,rv = np.loadtxt('rv_data/'+target+'_rvs.dat',unpack=True,usecols=(0,1))
+        # Read in RV data:
+        rv_data = np.genfromtxt('rv_data/'+target+'_rvs.dat',dtype='|S15')
+        # Get times and RVs:
+        t_rv = rv_data[:,0].astype('float')
+        rv = rv_data[:,1].astype('float')
+        # If more than four columns, assume fourth is instrument name, if only three,
+        # assume only errors are passed. If only two, fill instrument name with generic name:
+        if rv_data.shape[1]>=4:
+            rv_err = rv_data[:,2].astype('float')
+            rv_instruments = rv_data[:,3]
+        elif rv_data.shape[1] == 3:
+            rv_err = rv_data[:,2].astype('float')
+            rv_instruments = np.array(len(t_rv)*['instrument'])
+        else:
+            rv_instruments = np.array(len(t_rv)*['instrument'])
         # Convert RV times:
         t_rv = convert_time(rv_time_def,t_rv)
-    return t,f,f_err,t_rv,rv,rv_err
+    return t_tr,f,f_err,transit_instruments,t_rv,rv,rv_err,rv_instruments
 
 import pickle,os
 def save_results(target,mode,phot_noise_model,ld_law,parameters):
