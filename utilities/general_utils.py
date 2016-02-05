@@ -1,7 +1,25 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 
-def read_priors(target,filename = None):
+def read_priors(target,all_transit_instruments,all_rv_instruments,filename = None):
+    def generate_parameter(values):
+        out_dict = {}
+        out_dict['type'] = values[1]
+        if values[1] == 'Normal':
+           out_dict['object'] = normal_parameter(np.array(values[2].split(',')).astype('float64'))
+        elif values[1] == 'Uniform':
+           out_dict['object'] = uniform_parameter(np.array(values[2].split(',')).astype('float64'))
+        elif values[1] == 'Jeffreys':
+           out_dict['object'] = jeffreys_parameter(np.array(values[2].split(',')).astype('float64'))
+        elif values[1] == 'FIXED':
+           out_dict['object'] = constant_parameter(np.array(values[2].split(',')).astype('float64')[0])
+        if len(values)>=4:
+           out_dict['object'].set_value(np.float(values[3]))
+        return out_dict
+    # Check instrument names of transit and rv measurements:
+    transit_instruments = get_instruments(all_transit_instruments)
+    rv_instruments = get_instruments(all_rv_instruments)
+
     # Open the file containing the priors:
     if filename is None:
         f = open('priors_data/'+target+'_priors.dat','r')
@@ -19,20 +37,22 @@ def read_priors(target,filename = None):
             #                                [2]: hyperparameters,
             #                                [3]: starting value (optional)
             values = line.split()
-            priors[values[0]] = {}
-            priors[values[0]]['type'] = values[1]
-            if values[1] == 'Normal':
-               priors[values[0]]['object'] = normal_parameter(np.array(values[2].split(',')).astype('float64'))
-            elif values[1] == 'Uniform':
-               priors[values[0]]['object'] = uniform_parameter(np.array(values[2].split(',')).astype('float64'))
-            elif values[1] == 'Jeffreys':
-               priors[values[0]]['object'] = jeffreys_parameter(np.array(values[2].split(',')).astype('float64'))
-            elif values[1] == 'FIXED':
-               priors[values[0]]['object'] = constant_parameter(np.array(values[2].split(',')).astype('float64')[0])
-            if len(values)>=4:
-               priors[values[0]]['object'].set_value(np.float(values[3]))
+            # If more than one instrument on the RVs, and if not defined by the user, 
+            # create a different parameter for both the jitter and the center-of-mass velocity:
+            if (values[0] == 'mu' or values[0] == 'sigma_w_rv') and len(rv_instruments)>1:
+                for instrument in rv_instruments:
+                    priors[values[0]+'_'+instrument] = generate_parameter(values)
+            else:
+                priors[values[0]] = generate_parameter(values)
     f.close()
     return priors
+
+def get_instruments(instrument_list):
+    all_instruments = []
+    for instrument in instrument_list:
+        if instrument not in all_instruments:
+            all_instruments.append(instrument)
+    return all_instruments
 
 from astropy.time import Time as APYTime
 def convert_time(conv_string,t):
@@ -45,8 +65,8 @@ def convert_time(conv_string,t):
         return t
 
 def read_data(target,mode,transit_time_def,rv_time_def):
-    t_tr,f,f_err = None,None,None
-    t_rv,rv,rv_err = None,None,None
+    t_tr,f,f_err,transit_instruments = None,None,None,None
+    t_rv,rv,rv_err,rv_instruments = None,None,None,None
     if mode != 'rvs':
         # Read in transit data:
         transit_data = np.genfromtxt('transit_data/'+target+'_lc.dat',dtype='|S15')
@@ -115,9 +135,9 @@ def save_results(target,mode,phot_noise_model,ld_law,parameters):
     pickle.dump(out_dict,f)
     f.close()
 
-def read_results(target,mode,phot_noise_model,ld_law):
+def read_results(target,mode,phot_noise_model,ld_law,all_transit_instruments,all_rv_instruments):
     out_dir = 'results/'+target+'_'+mode+'_'+phot_noise_model+'_'+ld_law+'/'
-    parameters = read_priors(target,filename = out_dir+'priors.dat')
+    parameters = read_priors(target,all_transit_instruments,all_rv_instruments,filename = out_dir+'priors.dat')
     thefile = open(out_dir+'posteriors.pkl','r')
     posteriors = pickle.load(thefile)
     for parameter in parameters.keys():

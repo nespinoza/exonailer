@@ -179,11 +179,23 @@ def reverse_ld_coeffs(ld_law, q1, q2):
         coeff2 = 1.-np.sqrt(q1)
     return coeff1,coeff2
 
+def count_instruments(instrument_list):
+    all_instruments = []
+    for instrument in instrument_list:
+        if instrument not in all_instruments:
+            all_instruments.append(instrument)
+    all_idxs = len(all_instruments)*[[]]
+    all_ndata = len(all_instruments)*[[]]
+    for i in range(len(all_instruments)):
+        all_idxs[i] = np.where(all_instruments[i] == instrument_list)[0]
+        all_ndata[i] = len(all_idxs[i])
+    return all_instruments,all_idxs,np.array(all_ndata)
+
 import emcee
 import Wavelets
 import scipy.optimize as op
 import ajplanet as rv_model
-def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
+def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv, rv_err, rv_instruments,\
                        parameters, ld_law, mode, rv_jitter = False, \
                        njumps = 500, nburnin = 500, nwalkers = 100, noise_model = 'white',\
                        resampling = False, idx_resampling = [], texp = 0.01881944, N_resampling = 5):
@@ -207,6 +219,8 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
       error:            If you have errors on the fluxes, put them here. Otherwise, set 
                         this to None.
 
+      tr_instruments:   Instruments of each time/flux pair.
+
       times_rv:         Times (in same units as the period and time of transit center) 
                         of RV data.
 
@@ -214,6 +228,8 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
 
       rv_err:           If you have errors on the RVs, put them here. Otherwise, set 
                         this to None.
+
+      rv_instruments:   Instruments of each time/RV pair.
 
       parameters:       Dictionary containing the information regarding the parameters (including priors).
 
@@ -289,12 +305,17 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
            yerrrv = 0.0
        else:
            yerrrv = rv_err.astype('float64')
-       n_data_rvs = len(xrv)
+       all_rv_instruments,all_rv_instruments_idxs,n_data_rvs = count_instruments(rv_instruments)
+       print n_data_rvs
 
     # Initialize the variable names:
     transit_params = ['P','t0','a','p','inc','sigma_w','sigma_r','q1','q2']
-    rv_params = ['mu','K','sigma_w_rv']
     common_params = ['ecc','omega']
+    rv_params = ['K']
+    if len(all_rv_instruments)>1:
+       for instrument in all_rv_instruments:
+           rv_params.append('mu_'+instrument)
+           rv_params.append('sigma_w_rv_'+instrument)
 
     # Create lists that will save parameters to check the limits on and:
     parameters_to_check = []
@@ -313,38 +334,11 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
 
     # Eliminate from the parameter list parameters that are being fixed:
     if mode != 'rv':
-        if parameters['P']['type'] == 'FIXED':
-            transit_params.pop(transit_params.index('P'))
-        elif parameters['P']['type'] in ['Uniform','Jeffreys']:
-            parameters_to_check.append('P')
-        if parameters['t0']['type'] == 'FIXED':
-            transit_params.pop(transit_params.index('t0'))
-        elif parameters['t0']['type'] in ['Uniform','Jeffreys']:
-            parameters_to_check.append('t0')
-        if parameters['a']['type'] == 'FIXED':
-            transit_params.pop(transit_params.index('a'))
-        elif parameters['a']['type'] in ['Uniform','Jeffreys']:
-            parameters_to_check.append('a')
-        if parameters['p']['type'] == 'FIXED':
-            transit_params.pop(transit_params.index('p'))
-        elif parameters['p']['type'] in ['Uniform','Jeffreys']:
-            parameters_to_check.append('p')
-        if parameters['inc']['type'] == 'FIXED':
-            transit_params.pop(transit_params.index('inc'))
-        elif parameters['inc']['type'] in ['Uniform','Jeffreys']:
-            parameters_to_check.append('inc')
-        if parameters['sigma_w']['type'] == 'FIXED':
-            transit_params.pop(transit_params.index('sigma_w'))
-        elif parameters['sigma_w']['type'] in ['Uniform','Jeffreys']:
-            parameters_to_check.append('sigma_w')
-        if parameters['q1']['type'] == 'FIXED':
-            transit_params.pop(transit_params.index('q1'))
-        elif parameters['q1']['type'] in ['Uniform','Jeffreys']:
-            parameters_to_check.append('q1')
-        if parameters['q2']['type'] == 'FIXED':
-            transit_params.pop(transit_params.index('q2'))
-        elif parameters['q2']['type'] in ['Uniform','Jeffreys']:
-            parameters_to_check.append('q2')
+        for par in ['P','t0','a','p','inc','sigma_w','q1','q2']:
+            if parameters[par]['type'] == 'FIXED':
+                transit_params.pop(transit_params.index(par))
+            elif parameters[par]['type'] in ['Uniform','Jeffreys']:
+                parameters_to_check.append(par)
         if noise_model == 'flicker':
             if parameters['sigma_r']['type'] == 'FIXED':
                 transit_params.pop(transit_params.index('sigma_r'))
@@ -354,21 +348,36 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
             transit_params.pop(transit_params.index('sigma_r'))
 
     if mode != 'transit':
-        if parameters['mu']['type'] == 'FIXED':
-            rv_params.pop(rv_params.index('mu'))
-        elif parameters['mu']['type'] in ['Uniform','Jeffreys']:
-            parameters_to_check.append('mu')
         if parameters['K']['type'] == 'FIXED':
             rv_params.pop(rv_params.index('K'))
         elif parameters['K']['type'] in ['Uniform','Jeffreys']:
-            parameters_to_check.append('K')         
-        if parameters['sigma_w_rv']['type'] == 'FIXED':
-            rv_params.pop(rv_params.index('sigma_w_rv'))       
-        elif parameters['sigma_w_rv']['type'] in ['Uniform','Jeffreys']:
-            parameters_to_check.append('sigma_w_rv')
-        else: 
-            sigma_w_rv = 0.0 
-            rv_params.pop(rv_params.index('sigma_w_rv'))
+            parameters_to_check.append('K')
+        if len(all_rv_instruments)>1:
+            sigma_w_rv = {}
+            for instrument in all_rv_instruments:
+                if parameters['mu_'+instrument]['type'] == 'FIXED':
+                    rv_params.pop(rv_params.index('mu_'+instrument))
+                elif parameters['mu_'+instrument]['type'] in ['Uniform','Jeffreys']:
+                    parameters_to_check.append('mu_'+instrument)
+                if parameters['sigma_w_rv_'+instrument]['type'] == 'FIXED':
+                    rv_params.pop(rv_params.index('sigma_w_rv_'+instrument))       
+                elif parameters['sigma_w_rv_'+instrument]['type'] in ['Uniform','Jeffreys']:
+                    parameters_to_check.append('sigma_w_rv_'+instrument)
+                else: 
+                    sigma_w_rv[instrument] = 0.0 
+                    rv_params.pop(rv_params.index('sigma_w_rv_'+instrument))
+        else:
+            if parameters['K']['type'] == 'FIXED':
+                rv_params.pop(rv_params.index('K'))
+            elif parameters['K']['type'] in ['Uniform','Jeffreys']:
+                parameters_to_check.append('K')
+            if parameters['sigma_w_rv']['type'] == 'FIXED':
+                rv_params.pop(rv_params.index('sigma_w_rv'))
+            elif parameters['sigma_w_rv']['type'] in ['Uniform','Jeffreys']:
+                parameters_to_check.append('sigma_w_rv')
+            else:
+                sigma_w_rv = 0.0
+                rv_params.pop(rv_params.index('sigma_w_rv'))
 
     if mode == 'transit':
        all_mcmc_params = transit_params + common_params
@@ -441,13 +450,24 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         return log_like
 
     def lnlike_rv():
-        model = rv_model.pl_rv_array(xrv,parameters['mu']['object'].value,parameters['K']['object'].value,\
-                        parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
-                        parameters['t0']['object'].value,parameters['P']['object'].value)
-        residuals = (yrv-model)
-        taus = 1.0/((yerrrv)**2 + (parameters['sigma_w_rv']['object'].value)**2)
-        log_like = -0.5*(n_data_rvs*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
-        return log_like
+        if len(all_rv_instruments) == 1:
+            model = rv_model.pl_rv_array(xrv,parameters['mu']['object'].value,parameters['K']['object'].value,\
+                            parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
+                            parameters['t0']['object'].value,parameters['P']['object'].value)
+            residuals = (yrv-model)
+            taus = 1.0/((yerrrv)**2 + (parameters['sigma_w_rv']['object'].value)**2)
+            log_like = -0.5*(n_data_rvs[0]*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
+            return log_like
+        else:
+            log_like = 0.0
+            for i in range(len(all_rv_instruments)):
+                model = rv_model.pl_rv_array(xrv[all_rv_instruments_idxs[i]],parameters['mu_'+all_rv_instruments[i]]['object'].value,\
+                                parameters['K']['object'].value, parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
+                                parameters['t0']['object'].value,parameters['P']['object'].value)
+                residuals = (yrv[all_rv_instruments_idxs[i]]-model)
+                taus = 1.0/((yerrrv[all_rv_instruments_idxs[i]])**2 + (parameters['sigma_w_rv_'+all_rv_instruments[i]]['object'].value)**2)
+                log_like = log_like -0.5*(n_data_rvs[i]*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
+            return log_like
 
     def lnprior(theta):
         # Read in the values of the parameter vector and update values of the objects.
@@ -461,7 +481,6 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
                 if not parameters[c_param]['object'].check_value(theta[i]):
                     return -np.inf
             total_prior += parameters[c_param]['object'].get_ln_prior()
-
         return total_prior
 
     def lnprob_full(theta):
@@ -540,7 +559,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, times_rv, rv, rv_err, \
         initial_values[all_mcmc_params[i]] = parameters[all_mcmc_params[i]]['object'].value
 
 import matplotlib.pyplot as plt
-def plot_transit(t,f,parameters,ld_law,\
+def plot_transit(t,f,parameters,ld_law,transit_instruments,\
                  resampling = False, phase_max = 0.025, \
                  idx_resampling_pred = [], texp = 0.01881944, N_resampling = 5):
         
@@ -624,8 +643,8 @@ def plot_transit(t,f,parameters,ld_law,\
     plt.plot(phases,(f-model_pred) + (1-2.5*p**2),'.',color='black',alpha=0.4)
     plt.show()
 
-def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,resampling = False, \
-                        phase_max = 0.025, texp = 0.01881944, N_resampling = 5):
+def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,transit_instruments,rv_instruments,\
+                        resampling = False, phase_max = 0.025, texp = 0.01881944, N_resampling = 5):
     # Extract parameters:
     P = parameters['P']['object'].value
     inc = parameters['inc']['object'].value
@@ -634,10 +653,16 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,resampling
     t0 = parameters['t0']['object'].value
     q1 = parameters['q1']['object'].value
     q2 = parameters['q2']['object'].value
-    mu = parameters['mu']['object'].value
     K = parameters['K']['object'].value
     ecc = parameters['ecc']['object'].value
     omega = parameters['omega']['object'].value
+    all_rv_instruments,all_rv_instruments_idxs,n_data_rvs = count_instruments(rv_instruments)
+    if len(all_rv_instruments)>1:
+        mu = {}
+        for instrument in all_rv_instruments:
+            mu[instrument] = parameters['mu_'+instrument]['object'].value
+    else:
+        mu = parameters['mu']['object'].value
 
     # Get data phases:
     phases = get_phases(t,P,t0)
@@ -714,8 +739,14 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,resampling
     plt.subplot(212)
     plt.ylabel('Radial velocity (m/s)')
     plt.xlabel('Phase')
-    model_rv = rv_model.pl_rv_array(model_t,mu,K,omega*np.pi/180.,ecc,t0,P)
-    rv_phases = get_phases(trv,P,t0)
-    plt.errorbar(rv_phases,(rv-mu)*1e3,yerr=rv_err*1e3,fmt='o')
-    plt.plot(model_phase[idx],(model_rv[idx]-mu)*1e3)
+    model_rv = rv_model.pl_rv_array(model_t,0.0,K,omega*np.pi/180.,ecc,t0,P)
+    if len(all_rv_instruments)>1:
+        for i in range(len(all_rv_instruments)):
+            rv_phases = get_phases(trv[all_rv_instruments_idxs[i]],P,t0)
+            plt.errorbar(rv_phases,(rv[all_rv_instruments_idxs[i]]-mu[all_rv_instruments[i]])*1e3,yerr=rv_err[all_rv_instruments_idxs[i]]*1e3,fmt='o',label='RVs from '+all_rv_instruments[i])
+        plt.legend()
+    else:
+        rv_phases = get_phases(trv,P,t0)
+        plt.errorbar(rv_phases,(rv-mu)*1e3,yerr=rv_err*1e3,fmt='o')
+    plt.plot(model_phase[idx],(model_rv[idx])*1e3)
     plt.show()
