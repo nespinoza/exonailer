@@ -157,12 +157,12 @@ The optional variables are:
 
     sigma_r:        Parameter for 1/f noise (see below).
 
-If in the options of the exonailer.py code you set phot_noise_model to '1/f', then you 
-must also define a sigma_r parameter (see Carter & Winn, 2009). If you set rv_jitter to 
-True, you must also set a sigma_w_rv parameter for the jitter term. 
+If in the options of the exonailer.py code you set `phot_noise_model` to `'1/f'`, then you 
+must also define a `sigma_r` parameter (see Carter & Winn, 2009). If you set `rv_jitter` to 
+`True`, you must also set a `sigma_w_rv` parameter for the jitter term. 
 
 In the case in which you have two or more instruments for the RVs, you can also define 
-different priors for each value of mu and sigma_w_rv by adding a subscript and the name 
+different priors for each value of `mu` and `sigma_w_rv` by adding a subscript and the name 
 of the instrument. For example, if you have data from coralie and feros, instead of 
 using a common prior for `mu` and `sigma_w_rv` for both of them, you can specify one for 
 each by assignin priors to the variables `mu_coralie` and `sigma_w_rv_coralie` and `mu_feros`
