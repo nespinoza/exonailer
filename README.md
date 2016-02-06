@@ -165,7 +165,7 @@ In the case in which you have two or more instruments for the RVs, you can also 
 different priors for each value of `mu` and `sigma_w_rv` by adding a subscript and the name 
 of the instrument. For example, if you have data from coralie and feros, instead of 
 using a common prior for `mu` and `sigma_w_rv` for both of them, you can specify one for 
-each by assignin priors to the variables `mu_coralie` and `sigma_w_rv_coralie` and `mu_feros`
+each by assigning priors to the variables `mu_coralie` and `sigma_w_rv_coralie` and `mu_feros`
 and `sigma_w_rv_feros`.
 
 WHISH-LIST
