@@ -306,7 +306,6 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
        else:
            yerrrv = rv_err.astype('float64')
        all_rv_instruments,all_rv_instruments_idxs,n_data_rvs = count_instruments(rv_instruments)
-       print n_data_rvs
 
     # Initialize the variable names:
     transit_params = ['P','t0','a','p','inc','sigma_w','sigma_r','q1','q2']

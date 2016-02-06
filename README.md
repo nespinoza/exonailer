@@ -41,16 +41,23 @@ To use the code is very simple. Suppose we have a target that we named
 
     1. Put the photometry under `transit_data/my_data_lc.dat`. Similarly, 
        put the RVs (if you have any) under `rv_data/my_data_rvs.dat`. These 
-       are expected to have three columns: times, data and error; however, if you 
-       put only two is ok: the code will recognize that you don't have errors on 
-       your variables. The flux is expected to be normalized to 1. The RVs are expected 
-       to be in km/s.
+       are expected to have four columns: times, data, error and name of the 
+       instrument (which is a string); however, only the two first are mandatory: 
+       the code will recognize that you don't have errors on your variables and if no 
+       instrument names are given, it will assume all come from the same instrument. 
+       The flux is expected to be normalized to 1. The RVs are expected to be in km/s.
 
     2. Create a prior file under `priors_data/my_data_priors.dat`. The code 
        expects this file to have three columns: the parameter name, the prior 
        type and the hyperparameters of the prior separated by commas (see below). 
        If you want a parameter to be fixed, put `FIXED` on the Prior Type column 
        and define the value you want to keep it fixed in the hyperparameters column.
+
+As can be seen from the above, the code can handle data taken with different instruments. 
+Currently this only modifies the outputs of the RVs where, if more than one instrument is 
+detected, a different center-of-mass velocity is fitted for each instrument in order to 
+account for offsets between them, and if jitter is included, a different jitter term is 
+also fitted for each instrument.
 
 Next, you can modify the options in the exonailer.py code. The options are:
 
@@ -163,11 +170,9 @@ WHISH-LIST
 TODO
 ----
 
-    + Add option to define differnt mu's to RVs taken from different instruments.
+    + Add option to add photometry from different instruments.
 
     + GPs for detrending and for noise models.
-
-    + Automated TTV analysis.
 
     + Transit and RVs for multi-planet systems.
 
