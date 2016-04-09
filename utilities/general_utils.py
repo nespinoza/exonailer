@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 
-def read_priors(target,all_transit_instruments,all_rv_instruments,filename = None):
+def read_priors(target,all_transit_instruments,all_rv_instruments,mode,filename = None):
     def generate_parameter(values):
         out_dict = {}
         out_dict['type'] = values[1]
@@ -17,8 +17,10 @@ def read_priors(target,all_transit_instruments,all_rv_instruments,filename = Non
            out_dict['object'].set_value(np.float(values[3]))
         return out_dict
     # Check instrument names of transit and rv measurements:
-    transit_instruments = get_instruments(all_transit_instruments)
-    rv_instruments = get_instruments(all_rv_instruments)
+    if mode != 'rvs':
+        transit_instruments = get_instruments(all_transit_instruments)
+    if mode != 'transit':
+        rv_instruments = get_instruments(all_rv_instruments)
 
     # Open the file containing the priors:
     if filename is None:
@@ -39,9 +41,12 @@ def read_priors(target,all_transit_instruments,all_rv_instruments,filename = Non
             values = line.split()
             # If more than one instrument on the RVs, and if not defined by the user, 
             # create a different parameter for both the jitter and the center-of-mass velocity:
-            if (values[0] == 'mu' or values[0] == 'sigma_w_rv') and len(rv_instruments)>1:
-                for instrument in rv_instruments:
-                    priors[values[0]+'_'+instrument] = generate_parameter(values)
+            if mode != 'transit':
+                if (values[0] == 'mu' or values[0] == 'sigma_w_rv') and len(rv_instruments)>1:
+                    for instrument in rv_instruments:
+                        priors[values[0]+'_'+instrument] = generate_parameter(values)
+                else:
+                    priors[values[0]] = generate_parameter(values)
             else:
                 priors[values[0]] = generate_parameter(values)
     f.close()

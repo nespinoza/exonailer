@@ -53,7 +53,7 @@ rv_time_def = 'utc->utc'
 t_tr,f,f_err,transit_instruments,t_rv,rv,rv_err,rv_instruments = general_utils.read_data(target,mode,transit_time_def,rv_time_def)
 
 # Initialize the parameters:
-parameters = general_utils.read_priors(target,transit_instruments,rv_instruments)
+parameters = general_utils.read_priors(target,transit_instruments,rv_instruments,mode)
 
 # Pre-process the transit data if available:
 if mode != 'rvs':
