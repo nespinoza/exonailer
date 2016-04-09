@@ -296,6 +296,10 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
         else:
            params,m = init_batman(xt,law=ld_law)
 
+    # Initialize the variable names:
+    transit_params = ['P','t0','a','p','inc','sigma_w','sigma_r','q1','q2']
+    common_params = ['ecc','omega']
+    rv_params = ['K']
 
     # If mode is not transit, prepare the data too:
     if 'transit' not in mode:
@@ -307,14 +311,12 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
            yerrrv = rv_err.astype('float64')
        all_rv_instruments,all_rv_instruments_idxs,n_data_rvs = count_instruments(rv_instruments)
 
-    # Initialize the variable names:
-    transit_params = ['P','t0','a','p','inc','sigma_w','sigma_r','q1','q2']
-    common_params = ['ecc','omega']
-    rv_params = ['K']
-    if len(all_rv_instruments)>1:
-       for instrument in all_rv_instruments:
-           rv_params.append('mu_'+instrument)
-           rv_params.append('sigma_w_rv_'+instrument)
+       if len(all_rv_instruments)>1:
+          for instrument in all_rv_instruments:
+              rv_params.append('mu_'+instrument)
+              rv_params.append('sigma_w_rv_'+instrument)
+       else:
+          rv_params.append('sigma_w_rv')
 
     # Create lists that will save parameters to check the limits on and:
     parameters_to_check = []
@@ -667,7 +669,7 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,transit_in
     phases = get_phases(t,P,t0)
 
     # Generate model times by super-sampling the times:
-    model_t = np.linspace(np.min(t),np.max(t),len(t)*100)
+    model_t = np.linspace(np.min(t),np.max(t),len(t)*2)
     model_phase = get_phases(model_t,P,t0)
 
     # Initialize the parameters of the transit model, 
@@ -749,3 +751,30 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,transit_in
         plt.errorbar(rv_phases,(rv-mu)*1e3,yerr=rv_err*1e3,fmt='o')
     plt.plot(model_phase[idx],(model_rv[idx])*1e3)
     plt.show()
+    opt = raw_input('\t Save lightcurve and RV data and models? (y/n)')
+    if opt == 'y':
+        fname = raw_input('\t Output filename (without extension): ')   
+        fout = open('results/'+fname+'_lc_data.dat','w')
+        fout.write('# Time    Phase     Normalized flux \n')
+        for i in range(len(phases)):
+            fout.write(str(t[i])+' '+str(phases[i])+' '+str(f[i])+'\n')
+        fout.close()
+        fout = open('results/'+fname+'_lc_model.dat','w')
+        fout.write('# Phase     Normalized flux \n')
+        for i in range(len(model_phase[idx])):
+            fout.write(str(model_phase[idx][i])+' '+str(model_lc[idx][i])+'\n')
+        fout.close() 
+        fout = open('results/'+fname+'_rvs_data.dat','w')
+        fout.write('# Phase     RV (m/s)  Error (m/s)  Instrument\n')
+        for i in range(len(all_rv_instruments)):
+            rv_phases = get_phases(trv[all_rv_instruments_idxs[i]],P,t0)
+            for j in range(len(rv_phases)):
+                fout.write(str(rv_phases[j])+' '+str(((rv[all_rv_instruments_idxs[i]]-mu[all_rv_instruments[i]])*1e3)[j])+\
+                                ' '+str(((rv_err[all_rv_instruments_idxs[i]])*1e3)[j])+\
+                                ' '+all_rv_instruments[i]+'\n')
+        fout.close()
+        fout = open('results/'+fname+'_rvs_model.dat','w')
+        fout.write('# Phase     RV (m/s) \n')
+        for i in range(len(model_phase[idx])):
+            fout.write(str(model_phase[idx][i])+' '+str(((model_rv[idx])*1e3)[i])+'\n')
+        fout.close()
