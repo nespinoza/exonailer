@@ -142,7 +142,7 @@ def save_results(target,mode,phot_noise_model,ld_law,parameters):
 
 def read_results(target,mode,phot_noise_model,ld_law,all_transit_instruments,all_rv_instruments):
     out_dir = 'results/'+target+'_'+mode+'_'+phot_noise_model+'_'+ld_law+'/'
-    parameters = read_priors(target,all_transit_instruments,all_rv_instruments,filename = out_dir+'priors.dat')
+    parameters = read_priors(target,all_transit_instruments,all_rv_instruments,mode,filename = out_dir+'priors.dat')
     thefile = open(out_dir+'posteriors.pkl','r')
     posteriors = pickle.load(thefile)
     for parameter in parameters.keys():

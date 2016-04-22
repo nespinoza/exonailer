@@ -636,6 +636,7 @@ def plot_transit(t,f,parameters,ld_law,transit_instruments,\
 
     # Now plot:
     plt.style.use('ggplot')
+    plt.title('exonailer final fit + phased data')
     plt.xlabel('Phase')
     plt.ylabel('Relative flux')
     idx = np.argsort(model_phase)
@@ -731,6 +732,7 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,transit_in
     plt.style.use('ggplot')
     plt.subplot(211)
     #plt.xlabel('Phase')
+    plt.title('exonailer final fit + data')
     plt.ylabel('Relative flux')
     idx = np.argsort(model_phase)
     plt.plot(phases,f,'.',color='black',alpha=0.4)
