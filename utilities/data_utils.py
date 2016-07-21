@@ -577,7 +577,7 @@ def plot_transit(t,f,parameters,ld_law,transit_instruments,\
     phases = get_phases(t,P,t0)
 
     # Generate model times by super-sampling the times:
-    model_t = np.linspace(np.min(t),np.max(t),len(t)*100)
+    model_t = np.linspace(np.min(t),np.max(t),len(t)*2)
     model_phase = get_phases(model_t,P,t0)
 
     # Initialize the parameters of the transit model, 
@@ -592,7 +592,7 @@ def plot_transit(t,f,parameters,ld_law,transit_instruments,\
                 tij[j-1] = model_t[idx_resampling[i]] + ((j - ((N_resampling+1)/2.))*(texp/np.double(N_resampling)))
             t_resampling = np.append(t_resampling, np.copy(tij))
 
-        #idx_resampling_pred = np.where((phases>-phase_max)&(phases<phase_max))[0]
+        idx_resampling_pred = np.where((phases>-phase_max)&(phases<phase_max))[0]
         t_resampling_pred = np.array([])
         for i in range(len(idx_resampling_pred)):
             tij = np.zeros(N_resampling)
