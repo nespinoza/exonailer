@@ -9,7 +9,7 @@ import numpy as np
 ################# OPTIONS ######################
 
 # Define the target name, detrending method and parameters of it:
-target = 'my_lightcurve'
+target = 'my_data'
 phot_noise_model = 'white'
 phot_detrend = None
 window = 41
@@ -24,11 +24,11 @@ n_ommit = []
 # which phase range you want to perform such resampling. Additionally, 
 # define how many samples you want to resample:
 resampling = False
-phase_max = 0.01
+phase_max = 0.055
 N_resampling = 10
 
 # Limb-darkening law to be used:
-ld_law = 'quadratic'
+ld_law = 'squareroot'
 
 # Define the mode to be used:
 mode = 'transit' 
