@@ -6,7 +6,7 @@ or both.
 
 Author: Néstor Espinoza (nespino@astro.puc.cl)
 
-**If you make use of this code, please cite Espinoza et al., 2016, ApJ, in press. (http://arxiv.org/abs/1601.07608)**
+*If you make use of this code, please cite Espinoza et al., 2016, ApJ, in press. (http://arxiv.org/abs/1601.07608)*
 
 DEPENDENCIES
 ------------
