@@ -6,16 +6,19 @@ or both.
 
 Author: Néstor Espinoza (nespino@astro.puc.cl)
 
+**If you make use of this code, please cite Espinoza et al., 2016, ApJ, in press. (http://arxiv.org/abs/1601.07608)**
+
 DEPENDENCIES
 ------------
 
-This code makes use of five important libraries:
+This code makes use of dix important libraries:
 
 - **Numpy**.
 - **Scipy**.
 - **The Bad-Ass Transit Model cAlculatioN (batman) for transit modelling** (http://astro.uchicago.edu/~kreidberg/batman/).
 - **emcee for MCMC sampling** (http://dan.iel.fm/emcee/current/).
 - **Astropy for time conversions** (http://www.astropy.org).
+- **The GNU Scientific Library** (https://www.gnu.org/software/gsl/)
 
 All of them are open source and can be easily installed in any machine. Be 
 sure to install them before running the installer (see below), otherwise, it 
@@ -99,6 +102,10 @@ Next, you can modify the options in the exonailer.py code. The options are:
                         are, for example, in utc and you want results in tdb, this has to be 'utc->tdb'.
 
     rv_time_def:        Same as for transit times but for the times in the RVs.
+
+Once you are done with this, just run the code by doing:
+
+    python exonailer.py
 
 GENERATING THE PRIOR FILE
 -------------------------
