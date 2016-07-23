@@ -11,7 +11,7 @@ Author: Néstor Espinoza (nespino@astro.puc.cl)
 DEPENDENCIES
 ------------
 
-This code makes use of dix important libraries:
+This code makes use of six important libraries:
 
 - **Numpy**.
 - **Scipy**.
