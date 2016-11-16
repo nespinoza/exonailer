@@ -316,6 +316,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
               rv_params.append('mu_'+instrument)
               rv_params.append('sigma_w_rv_'+instrument)
        else:
+          rv_params.append('mu')
           rv_params.append('sigma_w_rv')
 
     # Create lists that will save parameters to check the limits on and:
@@ -577,7 +578,7 @@ def plot_transit(t,f,parameters,ld_law,transit_instruments,\
     phases = get_phases(t,P,t0)
 
     # Generate model times by super-sampling the times:
-    model_t = np.linspace(np.min(t),np.max(t),len(t)*2)
+    model_t = np.linspace(np.min(t),np.max(t),len(t)*N_resampling)
     model_phase = get_phases(model_t,P,t0)
 
     # Initialize the parameters of the transit model, 
@@ -642,6 +643,8 @@ def plot_transit(t,f,parameters,ld_law,transit_instruments,\
     idx = np.argsort(model_phase)
     plt.plot(phases,f,'.',color='black',alpha=0.4)
     plt.plot(model_phase[idx],model_lc[idx])
+    idx_ph = np.argsort(phases)
+    plt.plot(phases[idx_ph],np.ones(len(phases))*(1-2.5*p**2),'--',color='r')
     plt.plot(phases,(f-model_pred) + (1-2.5*p**2),'.',color='black',alpha=0.4)
     plt.show()
 
@@ -665,12 +668,13 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,transit_in
             mu[instrument] = parameters['mu_'+instrument]['object'].value
     else:
         mu = parameters['mu']['object'].value
+        print mu
 
     # Get data phases:
     phases = get_phases(t,P,t0)
 
     # Generate model times by super-sampling the times:
-    model_t = np.linspace(np.min(t),np.max(t),len(t)*2)
+    model_t = np.linspace(np.min(t),np.max(t),len(t)*4)
     model_phase = get_phases(model_t,P,t0)
 
     # Initialize the parameters of the transit model, 
@@ -743,6 +747,7 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,transit_in
     plt.ylabel('Radial velocity (m/s)')
     plt.xlabel('Phase')
     model_rv = rv_model.pl_rv_array(model_t,0.0,K,omega*np.pi/180.,ecc,t0,P)
+    predicted_rv = rv_model.pl_rv_array(trv,0.0,K,omega*np.pi/180.,ecc,t0,P)
     if len(all_rv_instruments)>1:
         for i in range(len(all_rv_instruments)):
             rv_phases = get_phases(trv[all_rv_instruments_idxs[i]],P,t0)
@@ -765,16 +770,27 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,transit_in
         fout.write('# Phase     Normalized flux \n')
         for i in range(len(model_phase[idx])):
             fout.write(str(model_phase[idx][i])+' '+str(model_lc[idx][i])+'\n')
-        fout.close() 
-        fout = open('results/'+fname+'_rvs_data.dat','w')
-        fout.write('# Phase     RV (m/s)  Error (m/s)  Instrument\n')
-        for i in range(len(all_rv_instruments)):
-            rv_phases = get_phases(trv[all_rv_instruments_idxs[i]],P,t0)
-            for j in range(len(rv_phases)):
-                fout.write(str(rv_phases[j])+' '+str(((rv[all_rv_instruments_idxs[i]]-mu[all_rv_instruments[i]])*1e3)[j])+\
-                                ' '+str(((rv_err[all_rv_instruments_idxs[i]])*1e3)[j])+\
-                                ' '+all_rv_instruments[i]+'\n')
         fout.close()
+        fout = open('results/'+fname+'_o-c_lc.dat','w')
+        for i in range(len(phases)):
+            fout.write(str(t[i])+' '+str(phases[i])+' '+str(f[i]-model_pred[i])+'\n')
+        fout.close()
+        fout = open('results/'+fname+'_rvs_data.dat','w')
+        fout2 = open('results/'+fname+'_o-c_rvs.dat','w')
+        fout.write('# Phase     RV (m/s)  Error (m/s)  Instrument\n')
+        if len(all_rv_instruments)>1:
+            for i in range(len(all_rv_instruments)):
+                rv_phases = get_phases(trv[all_rv_instruments_idxs[i]],P,t0)
+                for j in range(len(rv_phases)):
+                    fout.write(str(rv_phases[j])+' '+str(((rv[all_rv_instruments_idxs[i]]-mu[all_rv_instruments[i]])*1e3)[j])+\
+                                    ' '+str(((rv_err[all_rv_instruments_idxs[i]])*1e3)[j])+\
+                                    ' '+all_rv_instruments[i]+'\n')
+        else:
+            for i in range(len(rv_phases)):
+                fout.write(str(rv_phases[i])+' '+str((rv[i]-mu)*1e3)+' '+str(rv_err[i]*1e3)+' \n')
+                fout2.write(str(rv_phases[i])+' '+str((rv[i]-mu-predicted_rv[i])*1e3)+' '+str(rv_err[i]*1e3)+' \n')
+        fout.close()
+        fout2.close()
         fout = open('results/'+fname+'_rvs_model.dat','w')
         fout.write('# Phase     RV (m/s) \n')
         for i in range(len(model_phase[idx])):
