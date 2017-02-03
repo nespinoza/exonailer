@@ -68,7 +68,7 @@ Next, you can modify the options in the exonailer.py code. The options are:
 
     phot_noise_model:   This parameter defines the noise model used for the photometry. If set 
                         to 'white', it assumes the underlying noise is white-noise. If set to 
-                        '1/f', it assumes it is a white + 1/f.
+                        'flicker', it assumes it is a white + 1/f.
 
     phot_detrend:       This performs a small detrend on the photometry. If set to 'mfilter' 
                         it will median filter and then smooth this filter with a gaussian filter. 
@@ -164,7 +164,7 @@ The optional variables are:
 
     sigma_r:        Parameter for 1/f noise (see below).
 
-If in the options of the exonailer.py code you set `phot_noise_model` to `'1/f'`, then you 
+If in the options of the exonailer.py code you set `phot_noise_model` to `'flicker'`, then you 
 must also define a `sigma_r` parameter (see Carter & Winn, 2009). If you set `rv_jitter` to 
 `True`, you must also set a `sigma_w_rv` parameter for the jitter term. 
 
