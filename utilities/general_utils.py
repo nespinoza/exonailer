@@ -74,7 +74,7 @@ def read_data(target,mode,transit_time_def,rv_time_def):
     t_rv,rv,rv_err,rv_instruments = None,None,None,None
     if mode != 'rvs':
         # Read in transit data:
-        transit_data = np.genfromtxt('transit_data/'+target+'_lc.dat',dtype='|S15')
+        transit_data = np.genfromtxt('transit_data/'+target+'_lc.dat',dtype='|S100')
         # Get times and fluxes:
         t_tr = transit_data[:,0].astype('float')
         f = transit_data[:,1].astype('float')
@@ -92,7 +92,7 @@ def read_data(target,mode,transit_time_def,rv_time_def):
         t_tr = convert_time(transit_time_def,t_tr)
     if 'transit' not in mode:
         # Read in RV data:
-        rv_data = np.genfromtxt('rv_data/'+target+'_rvs.dat',dtype='|S15')
+        rv_data = np.genfromtxt('rv_data/'+target+'_rvs.dat',dtype='|S100')
         # Get times and RVs:
         t_rv = rv_data[:,0].astype('float')
         rv = rv_data[:,1].astype('float')
