@@ -175,6 +175,23 @@ using a common prior for `mu` and `sigma_w_rv` for both of them, you can specify
 each by assigning priors to the variables `mu_coralie` and `sigma_w_rv_coralie` and `mu_feros`
 and `sigma_w_rv_feros`.
 
+OUTPUTS
+-------
+
+The outputs of exonailer will be under the `results` folder. In this folder, you will find a folder for 
+each of your fits and, inside, three files:
+
+    posterior_parameters.dat:             This file saves the posterior parameters for each variable in the fit.
+                                          The first column lists the variable name, the second the median of the posterior of that parameter
+                                          (50th percentile), the third the 84th percentile of the posterior ("upper 1-sigma error") 
+                                          and the fourth the 16th percentile of the posterior ("lower 1-sigma error").
+
+    posteriors.pkl:                       This file has the actual posterior distributions for each parameter.
+
+    priors.dat:                           This file saves which prior you used for the given dataset (useful in case you are trying different 
+                                          priors to see how your results change).
+
+
 WHISH-LIST
 ----------
 
