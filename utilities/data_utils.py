@@ -279,6 +279,8 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
         else:
             yerrt = error.astype('float64')
         n_data_transit = len(xt)
+
+        all_tr_instruments,all_tr_instruments_idxs,n_data_trs = count_instruments(tr_instruments)
         # Initialize the parameters of the transit model, 
         # and prepare resampling data if resampling is True:
         if resampling:
