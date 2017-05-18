@@ -8,30 +8,34 @@ import numpy as np
 
 ################# OPTIONS ######################
 
+options = general_utils.read_input_parameters()
+"""
 # Define the target name, detrending method and parameters of it:
-target = 'my_data'
-phot_noise_model = 'white'
-phot_detrend = None
-window = 41
+target = '228735255b'#'CL032-10'#'my_data'
+
+photometry = {}
+phot_noise_model = ['white','white']
+phot_detrend = [None,None]#'mfilter'
+window = [41,41]
 
 # Define if you want to perform automatic outlier removal (sigma-clipping):
-phot_get_outliers = False
+phot_get_outliers = [True,False]
 
 # Define which transits you want to ommit (counted from first transit):
-n_ommit = []
+n_ommit = [[],[]]
 
 # Define if you want to perform the resampling technique and in 
 # which phase range you want to perform such resampling. Additionally, 
 # define how many samples you want to resample:
-resampling = False
-phase_max = 0.055
-N_resampling = 10
+resampling = [True,False]
+phase_max = [0.025,0.025]
+N_resampling = [20,20]
 
 # Limb-darkening law to be used:
-ld_law = 'squareroot'
+ld_law = ['quadratic','quadratic']
 
 # Define the mode to be used:
-mode = 'transit' 
+mode = 'full' 
 
 # Define noise properties:
 rv_jitter = False
@@ -42,9 +46,9 @@ njumps = 500
 nburnin = 500
 
 # Define time conversions:
-transit_time_def = 'utc->utc'
+transit_time_def = ['tdb->utc','utc->utc']
 rv_time_def = 'utc->utc'
-
+"""
 ################################################
 
 # ---------- DATA PRE-PROCESSING ------------- #
@@ -52,6 +56,8 @@ rv_time_def = 'utc->utc'
 # First, get the transit and RV data:
 t_tr,f,f_err,transit_instruments,t_rv,rv,rv_err,rv_instruments = general_utils.read_data(target,mode,transit_time_def,rv_time_def)
 
+print transit_instruments
+sys.exit()
 # Initialize the parameters:
 parameters = general_utils.read_priors(target,transit_instruments,rv_instruments,mode)
 

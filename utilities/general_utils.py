@@ -300,3 +300,49 @@ class constant_parameter:
       def __init__(self,val):
           self.value = val
 
+def read_input_parameters():
+    fin = open('options_file.dat','r')
+    opt_dict = {}
+    phot_opts = False
+    RV_opts = False
+    c_instrument = None
+    while True:
+        line = fin.readline()
+        if line == '':
+            break
+        if 'GENERAL OPTIONS' in line:
+            line = fin.readline()
+            opt_dict['target'] = fin.readline().split('TARGET:')[-1].split()
+            opt_dict['mode'] = fin.readline().split('MODE:')[-1].split()
+            opt_dict['nwalkers'] = int(fin.readline().split('NWALKERS:')[-1].split())
+            opt_dict['njumps'] = int(fin.readline().split('NJUMPS:')[-1].split())
+            opt_dict['nburnin'] = int(fin.readline().split('NBURNIN:')[-1].split())
+            phot_opts = False
+            RV_opts = False
+        if 'PHOTOMETRY OPTIONS' in line:
+            opt_dict['photometry'] = {}
+            phot_opts = True
+            RV_opts = False
+            line = fin.readline()
+        if 'RADIAL-VELOCITY OPTIONS' in line:
+            opt_dict['rvs'] = {}
+            RV_opts = True
+            phot_opts = False
+            line = fin.readline()
+        if phot_opts:
+            if 'INSTRUMENT:' in line:
+                c_instrument = line.split('INSTRUMENT:')[-1].split()
+                opt_dict['photometry'][c_instrument] = {}
+            else:
+                var,opt = line.split(':')
+                opt_dict['photometry'][c_instrument][var.split()] = opt.split()
+        if RV_opts:
+            if 'INSTRUMENT:' in line:
+                c_instrument = line.split('INSTRUMENT:')[-1].split()
+                opt_dict['photometry'][c_instrument] = {}
+            else:
+                var,opt = line.split(':')
+                opt_dict['photometry'][c_instrument][var.split()] = opt.split()
+                
+    fin.close()
+    return opt_dict            
