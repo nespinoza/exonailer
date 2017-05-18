@@ -55,23 +55,23 @@ rv_time_def = 'utc->utc'
 # ---------- DATA PRE-PROCESSING ------------- #
 
 # First, get the transit and RV data:
-t_tr,f,f_err,transit_instruments,t_rv,rv,rv_err,rv_instruments = general_utils.read_data(target,mode,transit_time_def,rv_time_def)
+t_tr,f,f_err,transit_instruments,t_rv,rv,rv_err,rv_instruments = general_utils.read_data(options)
 
-print transit_instruments
-sys.exit()
 # Initialize the parameters:
-parameters = general_utils.read_priors(target,transit_instruments,rv_instruments,mode)
+parameters = general_utils.read_priors(options['TARGET'],options['MODE'])
 
 # Pre-process the transit data if available:
-if mode != 'rvs':
-    t_tr,phases,f, f_err = data_utils.pre_process(t_tr,f,f_err,phot_detrend,\
-                                                  phot_get_outliers,n_ommit,\
-                                                  window,parameters,ld_law, mode)
-    if resampling:
-        # Define indexes between which data will be resampled:
-        idx_resampling = np.where((phases>-phase_max)&(phases<phase_max))[0]
-    else:
-        idx_resampling = []
+if options['MODE'] != 'rvs':
+    t_tr,phases,f, f_err = data_utils.pre_process(t_tr,f,f_err,options,transit_instruments,parameters)
+    idx_resampling = {}
+    for instrument in options['photometry'].keys():
+        idx = np.where(transit_instruments==instrument)[0]
+        if options['photometry'][instrument]['RESAMPLING']:
+            # Define indexes between which data will be resampled:
+            idx_resampling[instrument] = np.where((phases[idx]>-options['photometry'][instrument]['PHASE_MAX_RESAMPLING'])&\
+                                         (phases[idx]<options['photometry'][instrument]['PHASE_MAX_RESAMPLING']))[0]
+        else:
+            idx_resampling[instrument] = []
 
 # Create results folder if not already created:
 if not os.path.exists('results'):

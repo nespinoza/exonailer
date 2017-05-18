@@ -17,116 +17,131 @@ def get_phases(t,P,t0):
     phase[ii] = phase[ii]-1.0
     return phase
 
-def read_transit_params(prior_dict):
+def read_transit_params(prior_dict,instrument):
     names = ['P','inc','a','p','t0','q1','q2']
     vals = len(names)*[[]]
     for i in range(len(names)):
-        param = prior_dict[names[i]]
+        try:
+            param = prior_dict[names[i]]
+        except:
+            param = prior_dict[names[i]+'_'+instrument]
         vals[i] = param['object'].value
     return vals
 
-def pre_process(t,f,f_err,detrend,get_outliers,n_ommit,window,parameters,ld_law,mode):
-    # Now, the first phase in transit fitting is to 'detrend' the 
-    # data. This is done with the 'detrend' flag. If 
-    # the data is already detrended, set the flag to None:
-    if detrend is not None:
-        if detrend == 'mfilter':
-            # Get median filter, and smooth it with a gaussian filter:
-            from scipy.signal import medfilt
-            from scipy.ndimage.filters import gaussian_filter
-            filt = gaussian_filter(medfilt(f,window),5)
-            f = f/filt
+def pre_process(all_t,all_f,all_f_err,options,transit_instruments,parameters):#detrend,get_outliers,n_ommit,window,parameters,ld_law,mode):
+    all_phases = np.zeros(len(all_t))
+    for instrument in options['photometry'].keys():
+        all_idx = np.where(transit_instruments==instrument)[0]
+        t = all_t[all_idx]
+        f = all_f[all_idx]
+        if all_f_err is not None:
+            f_err = all_f_err[all_idx]
+        
+        # Now, the first phase in transit fitting is to 'detrend' the 
+        # data. This is done with the 'detrend' flag. If 
+        # the data is already detrended, set the flag to None:
+        if options['photometry'][instrument]['PHOT_DETREND'] is not None:
+            if options['photometry'][instrument]['PHOT_DETREND'] == 'mfilter':
+                # Get median filter, and smooth it with a gaussian filter:
+                from scipy.signal import medfilt
+                from scipy.ndimage.filters import gaussian_filter
+                filt = gaussian_filter(medfilt(f,window),5)
+                f = f/filt
+                if f_err is not None:
+                    f_err = f_err/filt
+
+        # Extract transit parameters from prior dictionary:
+        P,inc,a,p,t0,q1,q2 = read_transit_params(parameters,instrument)
+
+        # If the user wants to ommit transit events:
+        if len(options['photometry'][instrument]['NOMIT'])>0:
+            # Get the phases:
+            phases = (t-t0)/P
+
+            # Get the transit events in phase space:
+            transit_events = np.arange(ceil(np.min(phases)),floor(np.max(phases))+1)
+
+            # Convert to zeros fluxes at the events you want to eliminate:
+            for n in options['photometry'][instrument]['NOMIT']:
+                idx = np.where((phases>n-0.5)&(phases<n+0.5))[0]
+                f[idx] = np.zeros(len(idx))
+
+            # Eliminate them from the t,f and phases array:
+            idx = np.where(f!=0.0)[0]
+            t = t[idx]
+            f = f[idx]
+            phases = phases[idx]
             if f_err is not None:
-                f_err = f_err/filt
+                f_err = f_err[idx]
 
-    # Extract transit parameters from prior dictionary:
-    P,inc,a,p,t0,q1,q2 = read_transit_params(parameters)
+        if options['MODE'] == 'transit_noise':
+            # Get the phases:
+            phases = (t-t0)/P
 
-    # If the user wants to ommit transit events:
-    if len(n_ommit)>0:
-        # Get the phases:
-        phases = (t-t0)/P
+            # Get the transit events in phase space:
+            transit_events = np.arange(ceil(np.min(phases)),floor(np.max(phases))+1)
 
-        # Get the transit events in phase space:
-        transit_events = np.arange(ceil(np.min(phases)),floor(np.max(phases))+1)
+            for n in transit_events:
+                idx = np.where((phases>n-0.01)&(phases<n+0.01))[0]
+                f[idx] = np.zeros(len(idx))
 
-        # Convert to zeros fluxes at the events you want to eliminate:
-        for n in n_ommit:
-            idx = np.where((phases>n-0.5)&(phases<n+0.5))[0]
-            f[idx] = np.zeros(len(idx))
+            # Eliminate them from the t,f and phases array:
+            idx = np.where(f!=0.0)[0]
+            t = t[idx]
+            f = f[idx]
+            phases = phases[idx]
+            if f_err is not None:
+                f_err = f_err[idx]
 
-        # Eliminate them from the t,f and phases array:
-        idx = np.where(f!=0.0)[0]
-        t = t[idx]
-        f = f[idx]
-        phases = phases[idx]
-        if f_err is not None:
-            f_err = f_err[idx]
+        # Generate the phases:
+        phases = get_phases(t,P,t0)
+        # If outlier removal is on, remove them:
+        if options['photometry'][instrument]['PHOT_GET_OUTLIERS']:
+            model = get_transit_model(t.astype('float64'),t0,P,p,a,inc,q1,q2,options['photometry'][instrument]['LD_LAW'])
+            # Get approximate transit duration in phase space:
+            idx = np.where(model == 1.0)[0]
+            phase_dur = np.abs(phases[idx][np.where(np.abs(phases[idx]) == \
+                               np.min(np.abs(phases[idx])))])[0] + 0.01
 
-    if mode == 'transit_noise':
-        # Get the phases:
-        phases = (t-t0)/P
+            # Get precision:
+            median_flux = np.median(f)
+            sigma = get_sigma(f,median_flux)
+            # Perform sigma-clipping for out-of-transit data using phased data:
+            good_times = np.array([])
+            good_fluxes = np.array([])
+            good_phases = np.array([])
+            if f_err is not None:
+                good_errors = np.array([])
 
-        # Get the transit events in phase space:
-        transit_events = np.arange(ceil(np.min(phases)),floor(np.max(phases))+1)
+            # Iterate through the dataset:
+            for i in range(len(t)):
+                    if np.abs(phases[i])<phase_dur:
+                            good_times = np.append(good_times,t[i])
+                            good_fluxes = np.append(good_fluxes,f[i])
+                            good_phases = np.append(good_phases,phases[i])
+                            if f_err is not None:
+                               good_errors = np.append(good_errors,f_err[i])
+                    else:
+                            if (f[i]<median_flux + 3*sigma) and (f[i]>median_flux - 3*sigma):
+                                    good_times = np.append(good_times,t[i])
+                                    good_fluxes = np.append(good_fluxes,f[i])
+                                    good_phases = np.append(good_phases,phases[i])
+                                    if f_err is not None:
+                                        good_errors = np.append(good_errors,f_err[i])
+            t = good_times
+            f = good_fluxes
+            phases = good_phases
+            if f_err is not None:
+                f_err = good_errors
+        all_t[all_idx] = t
+        all_f[all_idx] = f 
+        all_f_err[all_idx] = f_err
+        all_phases[all_idx] = phases
 
-        for n in transit_events:
-            idx = np.where((phases>n-0.01)&(phases<n+0.01))[0]
-            f[idx] = np.zeros(len(idx))
-
-        # Eliminate them from the t,f and phases array:
-        idx = np.where(f!=0.0)[0]
-        t = t[idx]
-        f = f[idx]
-        phases = phases[idx]
-        if f_err is not None:
-            f_err = f_err[idx]
-
-    # Generate the phases:
-    phases = get_phases(t,P,t0)
-    # If outlier removal is on, remove them:
-    if get_outliers:
-        model = get_transit_model(t.astype('float64'),t0,P,p,a,inc,q1,q2,ld_law)
-        # Get approximate transit duration in phase space:
-        idx = np.where(model == 1.0)[0]
-        phase_dur = np.abs(phases[idx][np.where(np.abs(phases[idx]) == \
-                           np.min(np.abs(phases[idx])))])[0] + 0.01
-
-        # Get precision:
-        median_flux = np.median(f)
-        sigma = get_sigma(f,median_flux)
-        # Perform sigma-clipping for out-of-transit data using phased data:
-        good_times = np.array([])
-        good_fluxes = np.array([])
-        good_phases = np.array([])
-        if f_err is not None:
-            good_errors = np.array([])
-
-        # Iterate through the dataset:
-        for i in range(len(t)):
-                if np.abs(phases[i])<phase_dur:
-                        good_times = np.append(good_times,t[i])
-                        good_fluxes = np.append(good_fluxes,f[i])
-                        good_phases = np.append(good_phases,phases[i])
-                        if f_err is not None:
-                           good_errors = np.append(good_errors,f_err[i])
-                else:
-                        if (f[i]<median_flux + 3*sigma) and (f[i]>median_flux - 3*sigma):
-                                good_times = np.append(good_times,t[i])
-                                good_fluxes = np.append(good_fluxes,f[i])
-                                good_phases = np.append(good_phases,phases[i])
-                                if f_err is not None:
-                                    good_errors = np.append(good_errors,f_err[i])
-        t = good_times
-        f = good_fluxes
-        phases = good_phases
-        if f_err is not None:
-            f_err = good_errors
     if f_err is not None:
-       return t.astype('float64'), phases.astype('float64'), f.astype('float64'), f_err.astype('float64')
+       return all_t.astype('float64'), all_phases.astype('float64'), all_f.astype('float64'), all_f_err.astype('float64')
     else:
-       return t.astype('float64'), phases.astype('float64'), f.astype('float64'), f_err
-
+       return all_t.astype('float64'), all_phases.astype('float64'), all_f.astype('float64'), f_err
 def init_batman(t,law):
     """
     This function initializes the batman code.
