@@ -303,46 +303,60 @@ class constant_parameter:
 def read_input_parameters():
     fin = open('options_file.dat','r')
     opt_dict = {}
+    general_opts =False
     phot_opts = False
     RV_opts = False
     c_instrument = None
     while True:
         line = fin.readline()
+        print line
         if line == '':
             break
-        if 'GENERAL OPTIONS' in line:
-            line = fin.readline()
-            opt_dict['target'] = fin.readline().split('TARGET:')[-1].split()
-            opt_dict['mode'] = fin.readline().split('MODE:')[-1].split()
-            opt_dict['nwalkers'] = int(fin.readline().split('NWALKERS:')[-1].split())
-            opt_dict['njumps'] = int(fin.readline().split('NJUMPS:')[-1].split())
-            opt_dict['nburnin'] = int(fin.readline().split('NBURNIN:')[-1].split())
-            phot_opts = False
-            RV_opts = False
-        if 'PHOTOMETRY OPTIONS' in line:
-            opt_dict['photometry'] = {}
-            phot_opts = True
-            RV_opts = False
-            line = fin.readline()
-        if 'RADIAL-VELOCITY OPTIONS' in line:
-            opt_dict['rvs'] = {}
-            RV_opts = True
-            phot_opts = False
-            line = fin.readline()
-        if phot_opts:
-            if 'INSTRUMENT:' in line:
-                c_instrument = line.split('INSTRUMENT:')[-1].split()
-                opt_dict['photometry'][c_instrument] = {}
-            else:
-                var,opt = line.split(':')
-                opt_dict['photometry'][c_instrument][var.split()] = opt.split()
-        if RV_opts:
-            if 'INSTRUMENT:' in line:
-                c_instrument = line.split('INSTRUMENT:')[-1].split()
-                opt_dict['photometry'][c_instrument] = {}
-            else:
-                var,opt = line.split(':')
-                opt_dict['photometry'][c_instrument][var.split()] = opt.split()
+        if len(line.split()) != 0:
+            if 'GENERAL OPTIONS' in line:
+                line = fin.readline()
+                general_opts = True
+                phot_opts = False
+                RV_opts = False
+            if 'PHOTOMETRY OPTIONS' in line:
+                opt_dict['photometry'] = {}
+                phot_opts = True
+                RV_opts = False
+                general_opts = False
+                line = fin.readline()
+            if 'RADIAL-VELOCITY OPTIONS' in line:
+                opt_dict['rvs'] = {}
+                RV_opts = True
+                phot_opts = False
+                general_opts = False
+                line = fin.readline()
+            if general_opts:
+                if '---' not in line:
+                    var,opt = line.split(':')
+                    opt_dict[var.split()[0]] = (opt.split()[0]).split('\n')[0]
+                    if var.split()[0] in ['NWALKERS','NJUMPS','NBURNIN']:
+                        opt_dict[var.split()[0]] = int(opt_dict[var.split()[0]])
+            if phot_opts:
+                if 'INSTRUMENT:' in line:
+                    c_instrument = line.split('INSTRUMENT:')[-1].split()[0]
+                    opt_dict['photometry'][c_instrument] = {}
+                elif '---' not in line:
+                    var,opt = line.split(':')
+                    opt_dict['photometry'][c_instrument][var.split()[0]] = opt.split()[0]
+                    if var.split()[0] in ['WINDOW','NRESAMPLING']:
+                        opt_dict['photometry'][c_instrument][var.split()[0]] = int(opt.split()[0])
+                    elif var.split()[0] in ['PHASE_MAX_RESAMPLING']:
+                        opt_dict['photometry'][c_instrument][var.split()[0]] = np.double(opt.split()[0])
+                    elif var.split()[0] in ['NOMIT']:
+                            nomits = opt.split()[0].split(',')
+                            opt_dict['photometry'][c_instrument][var.split()[0]] = np.array(nomits).astype(int)
+            if RV_opts:
+                if 'INSTRUMENT:' in line:
+                    c_instrument = line.split('INSTRUMENT:')[-1].split()[0]
+                    opt_dict['rvs'][c_instrument] = {}
+                elif '---' not in line:
+                    var,opt = line.split(':')
+                    opt_dict['rvs'][c_instrument][var.split()[0]] = opt.split()[0]
                 
     fin.close()
     return opt_dict            

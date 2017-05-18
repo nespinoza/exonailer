@@ -9,6 +9,7 @@ import numpy as np
 ################# OPTIONS ######################
 
 options = general_utils.read_input_parameters()
+
 """
 # Define the target name, detrending method and parameters of it:
 target = '228735255b'#'CL032-10'#'my_data'
