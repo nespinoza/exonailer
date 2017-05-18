@@ -69,7 +69,9 @@ def convert_time(conv_string,t):
     else:
         return t
 
-def read_data(target,mode,transit_time_def,rv_time_def):
+def read_data(options):
+    target = options['TARGET']
+    mode = options['MODE']
     t_tr,f,f_err,transit_instruments = None,None,None,None
     t_rv,rv,rv_err,rv_instruments = None,None,None,None
     if mode != 'rvs':
@@ -89,7 +91,9 @@ def read_data(target,mode,transit_time_def,rv_time_def):
         else:
             transit_instruments = np.array(len(t_tr)*['instrument'])
         # Convert transit times (if input and output are the same, does nothing):
-        t_tr = convert_time(transit_time_def,t_tr)
+        for instrument in options['photometry'].keys():
+            idx = np.where(instrument == transit_instruments)[0]
+            t_tr[idx] = convert_time(options['photometry'][instrument]['TRANSIT_TIME_DEF'],t_tr[idx])
     if 'transit' not in mode:
         # Read in RV data:
         rv_data = np.genfromtxt('rv_data/'+target+'_rvs.dat',dtype='|S100')
@@ -107,7 +111,11 @@ def read_data(target,mode,transit_time_def,rv_time_def):
         else:
             rv_instruments = np.array(len(t_rv)*['instrument'])
         # Convert RV times:
-        t_rv = convert_time(rv_time_def,t_rv)
+        # Convert RV times (if input and output are the same, does nothing):
+        for instrument in options['rvs'].keys():
+            idx = np.where(instrument == rv_instruments)[0]
+            t_rv[idx] = convert_time(options['rvs'][instrument]['RV_TIME_DEF'],t_rv[idx])
+        #t_rv = convert_time(rv_time_def,t_rv)
     return t_tr,f,f_err,transit_instruments,t_rv,rv,rv_err,rv_instruments
 
 import pickle,os
@@ -309,7 +317,6 @@ def read_input_parameters():
     c_instrument = None
     while True:
         line = fin.readline()
-        print line
         if line == '':
             break
         if len(line.split()) != 0:
