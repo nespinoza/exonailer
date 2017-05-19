@@ -87,11 +87,11 @@ if not os.path.exists('results/'+target+'_'+mode+'_'+phot_noise_model+'_'+ld_law
 else:
     parameters = general_utils.read_results(target,options,transit_instruments,rv_instruments)
 
-# Get plot of the transit-fit:
-if mode == 'transit':
+# Get plot of the transit-fit, rv-fit or both (TODO: this is missing the RV fit alone!):
+if options['MODE'] == 'transit':
     data_utils.plot_transit(t_tr,f,parameters,ld_law,transit_instruments, resampling = resampling, \
                                       phase_max = phase_max, N_resampling=N_resampling)
-elif mode == 'full':
+elif options['MODE'] == 'full':
     data_utils.plot_transit_and_rv(t_tr,f,t_rv,rv,rv_err,parameters,ld_law,rv_jitter, \
                                       transit_instruments, rv_instruments,\
                                       resampling = resampling, phase_max = phase_max, \
