@@ -107,13 +107,20 @@ def read_data(options):
     return t_tr,f,f_err,transit_instruments,t_rv,rv,rv_err,rv_instruments
 
 import pickle,os
-def save_results(target,mode,phot_noise_model,ld_law,parameters):
-    out_dir = 'results/'+target+'_'+mode+'_'+phot_noise_model+'_'+ld_law+'/'
+def save_results(target,options,parameters):
+    mode = options['MODE']
+    target = options['TARGET']
+    fname = target+'_'+mode+'_'
+    for instrument in options['photometry'].keys():
+        fname = fname + instrument +'_'+options['photometry'][instrument]['PHOT_NOISE_MODEL']+\
+                      '_'+options['photometry'][instrument]['LD_LAW']+'_'
+    out_dir = 'results/'+fname[:-1]+'/'
     os.mkdir(out_dir)
     # Copy used prior file to the results folder:
     os.system('cp priors_data/'+target+'_priors.dat '+out_dir+'priors.dat')
     out_posterior_file = open(out_dir+'posterior_parameters.dat','w')
     out_posterior_file.write('# This file has the final parameters obtained from the MCMC chains.\n')
+    out_posterior_file.write('# parameter value   median value  upper c-band  lower c-band\n')
 
     # Generate an output dictionary with the posteriors:
     out_dict = {}
@@ -129,15 +136,21 @@ def save_results(target,mode,phot_noise_model,ld_law,parameters):
             up_error = 0
             low_error = 0
 
-        out_posterior_file.write('{0:10}  {1:10.10f}  {2:10.10f}  {3:10.10f}\n'.format(\
+        out_posterior_file.write('{0:18}  {1:10.10f}  {2:10.10f}  {3:10.10f}\n'.format(\
                                    parameter, param, up_error, low_error))
     # Save posterior dict:
     f = open(out_dir+'posteriors.pkl','w')
     pickle.dump(out_dict,f)
     f.close()
 
-def read_results(target,mode,phot_noise_model,ld_law,all_transit_instruments,all_rv_instruments):
-    out_dir = 'results/'+target+'_'+mode+'_'+phot_noise_model+'_'+ld_law+'/'
+def read_results(target,options,all_transit_instruments,all_rv_instruments):
+    mode = options['MODE']
+    target = options['TARGET']
+    fname = target+'_'+mode+'_'
+    for instrument in options['photometry'].keys():
+        fname = fname + instrument +'_'+options['photometry'][instrument]['PHOT_NOISE_MODEL']+\
+                      '_'+options['photometry'][instrument]['LD_LAW']+'_'
+    out_dir = 'results/'+fname[:-1]+'/'
     parameters = read_priors(target,all_transit_instruments,all_rv_instruments,mode,filename = out_dir+'priors.dat')
     thefile = open(out_dir+'posteriors.pkl','r')
     posteriors = pickle.load(thefile)

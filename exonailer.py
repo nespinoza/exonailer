@@ -80,16 +80,12 @@ if not os.path.exists('results'):
 # If chains not ran, run the MCMC and save results:
 if not os.path.exists('results/'+target+'_'+mode+'_'+phot_noise_model+'_'+ld_law):
     data_utils.exonailer_mcmc_fit(t_tr, f, f_err, transit_instruments, t_rv, rv, rv_err, rv_instruments,\
-                                     parameters, ld_law, mode, rv_jitter = rv_jitter, \
-                                     njumps = njumps, nburnin = nburnin, \
-                                     nwalkers = nwalkers,  noise_model = phot_noise_model,\
-                                     resampling = resampling, idx_resampling = idx_resampling,\
-                                     N_resampling = N_resampling)
+                                     parameters, idx_resampling, options)
 
-    general_utils.save_results(target,mode,phot_noise_model,ld_law,parameters)
+    general_utils.save_results(target,options,parameters)
 
 else:
-    parameters = general_utils.read_results(target,mode,phot_noise_model,ld_law,transit_instruments, rv_instruments)
+    parameters = general_utils.read_results(target,options,transit_instruments,rv_instruments)
 
 # Get plot of the transit-fit:
 if mode == 'transit':
