@@ -76,6 +76,7 @@ def read_data(options):
             f_err = transit_data[:,2].astype('float')
             transit_instruments = np.array(len(t_tr)*['instrument'])
         else:
+            f_err = np.zeros(len(t_tr))
             transit_instruments = np.array(len(t_tr)*['instrument'])
         # Convert transit times (if input and output are the same, does nothing):
         for instrument in options['photometry'].keys():
