@@ -1,8 +1,18 @@
 # -*- coding: utf-8 -*-
 from math import floor,ceil
 import matplotlib.pyplot as plt
+plt.style.use('ggplot')
+import matplotlib.gridspec as gridspec
+from george import kernels
+import george
+import celerite
+from celerite import terms
 import numpy as np
 import batman
+
+# This defines prior distributions that need samples to be
+# controlled so they don't get out of their support:
+prior_distributions = ['Uniform','Jeffreys','Beta']
 
 def get_sigma(x,median):
     """
@@ -17,115 +27,130 @@ def get_phases(t,P,t0):
     phase[ii] = phase[ii]-1.0
     return phase
 
-def read_transit_params(prior_dict):
+def read_transit_params(prior_dict,instrument):
     names = ['P','inc','a','p','t0','q1','q2']
     vals = len(names)*[[]]
     for i in range(len(names)):
-        param = prior_dict[names[i]]
+        try:
+            param = prior_dict[names[i]]
+        except:
+            param = prior_dict[names[i]+'_'+instrument]
         vals[i] = param['object'].value
     return vals
 
-def pre_process(t,f,f_err,detrend,get_outliers,n_ommit,window,parameters,ld_law,mode):
-    # Now, the first phase in transit fitting is to 'detrend' the 
-    # data. This is done with the 'detrend' flag. If 
-    # the data is already detrended, set the flag to None:
-    if detrend is not None:
-        if detrend == 'mfilter':
-            # Get median filter, and smooth it with a gaussian filter:
-            from scipy.signal import medfilt
-            from scipy.ndimage.filters import gaussian_filter
-            filt = gaussian_filter(medfilt(f,window),5)
-            f = f/filt
+def pre_process(all_t,all_f,all_f_err,options,transit_instruments,parameters):
+    out_t = np.array([])
+    out_f = np.array([])
+    out_phases = np.array([])
+    out_f_err = np.array([])
+    out_transit_instruments = np.array([])
+    all_phases = np.zeros(len(all_t))
+    for instrument in options['photometry'].keys():
+        all_idx = np.where(transit_instruments==instrument)[0]
+        t = all_t[all_idx]
+        f = all_f[all_idx]
+        if all_f_err is not None:
+            f_err = all_f_err[all_idx]
+        
+        # Now, the first phase in transit fitting is to 'detrend' the 
+        # data. This is done with the 'detrend' flag. If 
+        # the data is already detrended, set the flag to None:
+        if options['photometry'][instrument]['PHOT_DETREND'] is not None:
+            if options['photometry'][instrument]['PHOT_DETREND'] == 'mfilter':
+                # Get median filter, and smooth it with a gaussian filter:
+                from scipy.signal import medfilt
+                from scipy.ndimage.filters import gaussian_filter
+                filt = gaussian_filter(medfilt(f,options['photometry'][instrument]['WINDOW']),5)
+                f = f/filt
+                if f_err is not None:
+                    f_err = f_err/filt
+
+        # Extract transit parameters from prior dictionary:
+        if options['MODE'] != 'transit_noise':
+            P,inc,a,p,t0,q1,q2 = read_transit_params(parameters,instrument)
+
+        # If the user wants to ommit transit events:
+        if len(options['photometry'][instrument]['NOMIT'])>0:
+            # Get the phases:
+            phases = (t-t0)/P
+
+            # Get the transit events in phase space:
+            transit_events = np.arange(ceil(np.min(phases)),floor(np.max(phases))+1)
+
+            # Convert to zeros fluxes at the events you want to eliminate:
+            for n in options['photometry'][instrument]['NOMIT']:
+                idx = np.where((phases>n-0.5)&(phases<n+0.5))[0]
+                f[idx] = np.zeros(len(idx))
+
+            # Eliminate them from the t,f and phases array:
+            idx = np.where(f!=0.0)[0]
+            t = t[idx]
+            f = f[idx]
+            phases = phases[idx]
             if f_err is not None:
-                f_err = f_err/filt
+                f_err = f_err[idx]
 
-    # Extract transit parameters from prior dictionary:
-    P,inc,a,p,t0,q1,q2 = read_transit_params(parameters)
+        if options['MODE'] != 'transit_noise':
+            # Generate the phases:
+            phases = get_phases(t,P,t0)
+        # If outlier removal is on, remove them:
+        if options['photometry'][instrument]['PHOT_GET_OUTLIERS'] and options['MODE'] != 'transit_noise':
+            model = get_transit_model(t.astype('float64'),t0,P,p,a,inc,q1,q2,options['photometry'][instrument]['LD_LAW'])
+            # Get approximate transit duration in phase space:
+            idx = np.where(model == 1.0)[0]
+            phase_dur = np.abs(phases[idx][np.where(np.abs(phases[idx]) == \
+                               np.min(np.abs(phases[idx])))])[0] + 0.01
 
-    # If the user wants to ommit transit events:
-    if len(n_ommit)>0:
-        # Get the phases:
-        phases = (t-t0)/P
+            # Get precision:
+            median_flux = np.median(f)
+            sigma = get_sigma(f,median_flux)
+            # Perform sigma-clipping for out-of-transit data using phased data:
+            good_times = np.array([])
+            good_fluxes = np.array([])
+            good_phases = np.array([])
+            if f_err is not None:
+                good_errors = np.array([])
 
-        # Get the transit events in phase space:
-        transit_events = np.arange(ceil(np.min(phases)),floor(np.max(phases))+1)
+            # Iterate through the dataset:
+            for i in range(len(t)):
+                    if np.abs(phases[i])<phase_dur:
+                            good_times = np.append(good_times,t[i])
+                            good_fluxes = np.append(good_fluxes,f[i])
+                            good_phases = np.append(good_phases,phases[i])
+                            if f_err is not None:
+                               good_errors = np.append(good_errors,f_err[i])
+                    else:
+                            if (f[i]<median_flux + 3*sigma) and (f[i]>median_flux - 3*sigma):
+                                    good_times = np.append(good_times,t[i])
+                                    good_fluxes = np.append(good_fluxes,f[i])
+                                    good_phases = np.append(good_phases,phases[i])
+                                    if f_err is not None:
+                                        good_errors = np.append(good_errors,f_err[i])
+            t = good_times
+            f = good_fluxes
+            phases = good_phases
+            if f_err is not None:
+                f_err = good_errors
+        out_t = np.append(out_t,t)
+        out_f = np.append(out_f,f)
+        out_transit_instruments = np.append(out_transit_instruments,np.array(len(t)*[instrument]))
+        out_f_err = np.append(out_f_err,f_err)
+        #all_t[all_idx] = t
+        #all_f[all_idx] = f 
+        #all_f_err[all_idx] = f_err
+        if options['MODE'] != 'transit_noise':
+            out_phases = np.append(out_phases,phases)
+            #all_phases[all_idx] = phases
+        else:
+            out_phases = np.append(out_phases,np.zeros(len(t)))
+            #all_phases = np.zeros(len(t))
 
-        # Convert to zeros fluxes at the events you want to eliminate:
-        for n in n_ommit:
-            idx = np.where((phases>n-0.5)&(phases<n+0.5))[0]
-            f[idx] = np.zeros(len(idx))
-
-        # Eliminate them from the t,f and phases array:
-        idx = np.where(f!=0.0)[0]
-        t = t[idx]
-        f = f[idx]
-        phases = phases[idx]
-        if f_err is not None:
-            f_err = f_err[idx]
-
-    if mode == 'transit_noise':
-        # Get the phases:
-        phases = (t-t0)/P
-
-        # Get the transit events in phase space:
-        transit_events = np.arange(ceil(np.min(phases)),floor(np.max(phases))+1)
-
-        for n in transit_events:
-            idx = np.where((phases>n-0.01)&(phases<n+0.01))[0]
-            f[idx] = np.zeros(len(idx))
-
-        # Eliminate them from the t,f and phases array:
-        idx = np.where(f!=0.0)[0]
-        t = t[idx]
-        f = f[idx]
-        phases = phases[idx]
-        if f_err is not None:
-            f_err = f_err[idx]
-
-    # Generate the phases:
-    phases = get_phases(t,P,t0)
-    # If outlier removal is on, remove them:
-    if get_outliers:
-        model = get_transit_model(t.astype('float64'),t0,P,p,a,inc,q1,q2,ld_law)
-        # Get approximate transit duration in phase space:
-        idx = np.where(model == 1.0)[0]
-        phase_dur = np.abs(phases[idx][np.where(np.abs(phases[idx]) == \
-                           np.min(np.abs(phases[idx])))])[0] + 0.01
-
-        # Get precision:
-        median_flux = np.median(f)
-        sigma = get_sigma(f,median_flux)
-        # Perform sigma-clipping for out-of-transit data using phased data:
-        good_times = np.array([])
-        good_fluxes = np.array([])
-        good_phases = np.array([])
-        if f_err is not None:
-            good_errors = np.array([])
-
-        # Iterate through the dataset:
-        for i in range(len(t)):
-                if np.abs(phases[i])<phase_dur:
-                        good_times = np.append(good_times,t[i])
-                        good_fluxes = np.append(good_fluxes,f[i])
-                        good_phases = np.append(good_phases,phases[i])
-                        if f_err is not None:
-                           good_errors = np.append(good_errors,f_err[i])
-                else:
-                        if (f[i]<median_flux + 3*sigma) and (f[i]>median_flux - 3*sigma):
-                                good_times = np.append(good_times,t[i])
-                                good_fluxes = np.append(good_fluxes,f[i])
-                                good_phases = np.append(good_phases,phases[i])
-                                if f_err is not None:
-                                    good_errors = np.append(good_errors,f_err[i])
-        t = good_times
-        f = good_fluxes
-        phases = good_phases
-        if f_err is not None:
-            f_err = good_errors
     if f_err is not None:
-       return t.astype('float64'), phases.astype('float64'), f.astype('float64'), f_err.astype('float64')
+       return out_t.astype('float64'), out_phases.astype('float64'), out_f.astype('float64'), out_f_err.astype('float64'),out_transit_instruments
+       #return all_t.astype('float64'), all_phases.astype('float64'), all_f.astype('float64'), all_f_err.astype('float64')
     else:
-       return t.astype('float64'), phases.astype('float64'), f.astype('float64'), f_err
+       return out_t.astype('float64'), out_phases.astype('float64'), out_f.astype('float64'), f_err,out_transit_instruments
+       #return all_t.astype('float64'), all_phases.astype('float64'), all_f.astype('float64'), f_err
 
 def init_batman(t,law):
     """
@@ -196,9 +221,10 @@ import Wavelets
 import scipy.optimize as op
 import ajplanet as rv_model
 def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv, rv_err, rv_instruments,\
-                       parameters, ld_law, mode, rv_jitter = False, \
-                       njumps = 500, nburnin = 500, nwalkers = 100, noise_model = 'white',\
-                       resampling = False, idx_resampling = [], texp = 0.01881944, N_resampling = 5):
+                       parameters, idx_resampling, options,texp = 0.01881944):
+                       #ld_law, mode, rv_jitter = False, \
+                       #njumps = 500, nburnin = 500, nwalkers = 100, noise_model = 'white',\
+                       #resampling = False, idx_resampling = [], texp = 0.01881944, N_resampling = 5):
     """
     This function performs an MCMC fitting procedure using a transit model 
     fitted to input data using the batman package (Kreidberg, 2015) assuming 
@@ -206,9 +232,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
     Winn, 2010). It makes use of the emcee package (Foreman-Mackey et al., 2014) 
     to perform the MCMC, and the sampling scheme explained in Kipping (2013) to 
     sample coefficients from two-parameter limb-darkening laws; the logarithmic 
-    law is sampled according to Espinoza & Jordán (2015b). 
-
-    This transit models assumes 0 eccentricity.
+    law is sampled according to Espinoza & Jordán (2016). 
 
     The inputs are:
 
@@ -233,76 +257,65 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
 
       parameters:       Dictionary containing the information regarding the parameters (including priors).
 
-      ld_law:           Two-coefficient limb-darkening law to be used. Can be 'quadratic',
-                        'logarithmic', 'square-root' or 'exponential'. The last one is not 
-                        recommended because it is non-physical (see Espinoza & Jordán, 2015b).
-
-
-      mode:             'full' = transit + rv fit, 'transit' = only transit fit, 'rv' = only RV fit.
-
-      n_jumps:          Number of jumps to be done by each of the walkers in the MCMC. 
-
-      n_burnin:         Number of burnins to use for the MCMC.
-
-      n_walkers:        Number of walkers to be used to run the MCMC.
-
-      noise_model:      Currently supports two types: 
- 
-                          'white'    :   It assumes the underlying noise model is white, gaussian
-                                         noise.
-
-                          'flicker'  :   It assumes the underlying noise model is a sum of a 
-                                         white noise process plus a 1/f noise model.
-
-      resampling:       Binary variable defining if you want to do resampling of the transit 
-                        lightcurve or not (http://arxiv.org/abs/1004.3741).
-
       idx_resampling:   This defines the indexes over which you want to perform such resampling 
-                        (selective resampling).i
+                        (selective resampling). It is a dictionary over the instruments; idx_resampling[instrument] 
+                        has the indexes for the given instrument.
+
+      options:          Dictionary containing the information inputted by the user.
 
       texp          :   Exposure time in days of each datapoint (default is Kepler long-cadence, 
                         taken from here: http://archive.stsci.edu/mast_faq.php?mission=KEPLER)
 
-      N_resampling:     Define how many points to resample.
-
     The outputs are the chains of each of the parameters in the theta_0 array in the same 
     order as they were inputted. This includes the sampled parameters from all the walkers.
+
     """
+
     # If mode is not RV:
-    if mode != 'rv':
-        params,m = init_batman(times,law=ld_law)
-        # Prepare the data:
+    if options['MODE'] != 'rv':
+        params = {}
+        m = {}
+        t_resampling = {}
+        transit_flat = {}
+        # Count instruments:
+        all_tr_instruments,all_tr_instruments_idxs,n_data_trs = count_instruments(tr_instruments)
+        # Prepare data for batman:
         xt = times.astype('float64')
         yt = relative_flux.astype('float64')
-        if error is None:
-            yerrt = 0.0
-        else:
-            yerrt = error.astype('float64')
-        n_data_transit = len(xt)
-        # Initialize the parameters of the transit model, 
-        # and prepare resampling data if resampling is True:
-        if resampling:
-           t_resampling = np.array([])
-           for i in range(len(idx_resampling)):
-               tij = np.zeros(N_resampling)
-               for j in range(1,N_resampling+1):
-                   # Eq (35) in Kipping (2010)    
-                   tij[j-1] = xt[idx_resampling[i]] + ((j - ((N_resampling+1)/2.))*(texp/np.double(N_resampling)))
-               t_resampling = np.append(t_resampling, np.copy(tij))
+        yerrt = error.astype('float64')
+        if options['MODE'] != 'transit_noise':
+          for k in range(len(all_tr_instruments)):
+            instrument = all_tr_instruments[k]
+            params[instrument],m[instrument] = init_batman(xt[all_tr_instruments_idxs[k]],\
+                                               law=options['photometry'][instrument]['LD_LAW'])
+            # Initialize the parameters of the transit model, 
+            # and prepare resampling data if resampling is True:
+            if options['photometry'][instrument]['RESAMPLING']:
+               t_resampling[instrument] = np.array([])
+               for i in range(len(idx_resampling[instrument])):
+                   tij = np.zeros(options['photometry'][instrument]['NRESAMPLING'])
+                   for j in range(1,options['photometry'][instrument]['NRESAMPLING']+1):
+                       # Eq (35) in Kipping (2010)    
+                       tij[j-1] = xt[all_tr_instruments_idxs[k]][idx_resampling[instrument][i]] + ((j - \
+                                  ((options['photometry'][instrument]['NRESAMPLING']+1)/2.))*(texp/np.double(\
+                                  options['photometry'][instrument]['NRESAMPLING'])))
+                   t_resampling[instrument] = np.append(t_resampling[instrument], np.copy(tij))
 
-           params,m = init_batman(t_resampling,law=ld_law)
-           transit_flat = np.ones(len(xt))
-           transit_flat[idx_resampling] = np.zeros(len(idx_resampling))
-        else:
-           params,m = init_batman(xt,law=ld_law)
+               params[instrument],m[instrument] = init_batman(t_resampling[instrument],\
+                                                  law=options['photometry'][instrument]['LD_LAW'])
+               transit_flat[instrument] = np.ones(len(xt[all_tr_instruments_idxs[k]]))
+               transit_flat[instrument][idx_resampling[instrument]] = np.zeros(len(idx_resampling[instrument]))
 
     # Initialize the variable names:
-    transit_params = ['P','t0','a','p','inc','sigma_w','sigma_r','q1','q2']
+    if len(all_tr_instruments)>1:
+        transit_params = ['P','inc']
+    else:
+        the_instrument = options['photometry'].keys()[0]
+        transit_params = ['P','inc','t0','a','p','sigma_w','sigma_r','q1','q2']
     common_params = ['ecc','omega']
-    rv_params = ['K']
 
-    # If mode is not transit, prepare the data too:
-    if 'transit' not in mode:
+    # If mode is not transit, prepare the RV data too:
+    if 'transit' not in options['MODE']:
        xrv = times_rv.astype('float64')
        yrv = rv.astype('float64')
        if rv_err is None:
@@ -311,88 +324,195 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
            yerrrv = rv_err.astype('float64')
        all_rv_instruments,all_rv_instruments_idxs,n_data_rvs = count_instruments(rv_instruments)
 
-       if len(all_rv_instruments)>1:
-          for instrument in all_rv_instruments:
-              rv_params.append('mu_'+instrument)
-              rv_params.append('sigma_w_rv_'+instrument)
-       else:
-          rv_params.append('mu')
-          rv_params.append('sigma_w_rv')
+       rv_params = ['K']
+       #if len(all_rv_instruments)>1:
+       #   for instrument in all_rv_instruments:
+       #       rv_params.append('mu_'+instrument)
+       #       rv_params.append('sigma_w_rv_'+instrument)
+       #else:
+       #   rv_params.append('mu')
+       #   rv_params.append('sigma_w_rv')
 
-    # Create lists that will save parameters to check the limits on and:
+    # Create lists that will save parameters to check the limits on:
     parameters_to_check = []
 
     # Check common parameters:
-    if parameters['ecc']['type'] == 'FIXED':
-       common_params.pop(common_params.index('ecc'))
-    elif parameters['ecc']['type'] in ['Uniform','Jeffreys']:
-       parameters_to_check.append('ecc')
+    if options['MODE'] != 'transit_noise':
+        if parameters['ecc']['type'] == 'FIXED':
+           common_params.pop(common_params.index('ecc'))
+        elif parameters['ecc']['type'] in prior_distributions:
+           parameters_to_check.append('ecc')
 
-    if parameters['omega']['type'] == 'FIXED':
-       common_params.pop(common_params.index('omega'))
-    elif parameters['omega']['type'] in ['Uniform','Jeffreys']:
-       parameters_to_check.append('omega')
+        if parameters['omega']['type'] == 'FIXED':
+           common_params.pop(common_params.index('omega'))
+        elif parameters['omega']['type'] in prior_distributions:
+           parameters_to_check.append('omega')
 
 
     # Eliminate from the parameter list parameters that are being fixed:
-    if mode != 'rv':
-        for par in ['P','t0','a','p','inc','sigma_w','q1','q2']:
-            if parameters[par]['type'] == 'FIXED':
-                transit_params.pop(transit_params.index(par))
-            elif parameters[par]['type'] in ['Uniform','Jeffreys']:
-                parameters_to_check.append(par)
-        if noise_model == 'flicker':
-            if parameters['sigma_r']['type'] == 'FIXED':
-                transit_params.pop(transit_params.index('sigma_r'))
-            elif parameters['sigma_r']['type'] in ['Uniform','Jeffreys']:
-                parameters_to_check.append('sigma_r')
-        else:
-            transit_params.pop(transit_params.index('sigma_r'))
+    # First, generate a sufix dictionary, which will add the sufix _instrument to
+    # each instrument in the MCMC, in order to keep track of the parameters that
+    # are being held constant between instruments and those that vary with instrument:
+    sufix = {}
+    if options['MODE'] != 'rv' and options['MODE'] != 'transit_noise':
+        if len(all_tr_instruments)>1:
+            # Check parameters that always will be constant amongst transits:
+            for par in ['P','inc']:
+                if parameters[par]['type'] == 'FIXED':
+                    transit_params.pop(transit_params.index(par))
+                elif parameters[par]['type'] in prior_distributions:
+                    parameters_to_check.append(par)
 
-    if mode != 'transit':
+            # Now check parameters that might change between instruments:
+            for i in range(len(all_tr_instruments)):
+                instrument = all_tr_instruments[i]
+                sufix[instrument] = {}
+                for par in ['t0','a','p','sigma_w','q1','q2']:
+                    orig_par = par
+                    sufix[instrument][orig_par] = ''
+                    if par not in parameters.keys():
+                        par = par+'_'+instrument
+                        sufix[instrument][orig_par] = '_'+instrument
+                        if par not in parameters.keys():
+                            print 'Error: parameter '+orig_par+' not defined. Exiting...'
+                            sys.exit()
+                    if par not in transit_params:
+                        transit_params.append(par)    
+                    if parameters[par]['type'] == 'FIXED':
+                        transit_params.pop(transit_params.index(par))
+                    elif parameters[par]['type'] in prior_distributions:
+                        parameters_to_check.append(par)
+                if options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'flicker':
+                    for noise_param in ['sigma_r']:
+                        transit_params.append(noise_param+'_'+instrument)
+                        if parameters[noise_param+'_'+instrument]['type'] == 'FIXED':
+                            transit_params.pop(transit_params.index(noise_param+'_'+instrument))
+                        elif parameters[noise_param+'_'+instrument]['type'] in prior_distributions:
+                            parameters_to_check.append(noise_param+'_'+instrument)
+                elif options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'GPExpSquaredKernel':
+                    for noise_param in ['lnh','lnlambda']:
+                        transit_params.append(noise_param+'_'+instrument)
+                        if parameters[noise_param+'_'+instrument]['type'] == 'FIXED':
+                            transit_params.pop(transit_params.index(noise_param+'_'+instrument))
+                        elif parameters[noise_param+'_'+instrument]['type'] in prior_distributions:
+                            parameters_to_check.append(noise_param+'_'+instrument)
+                elif options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'GPGranulation':
+                    for noise_param in ['lnomega','lnS']:
+                        transit_params.append(noise_param+'_'+instrument)
+                        if parameters[noise_param+'_'+instrument]['type'] == 'FIXED':
+                            transit_params.pop(transit_params.index(noise_param+'_'+instrument))
+                        elif parameters[noise_param+'_'+instrument]['type'] in prior_distributions:
+                            parameters_to_check.append(noise_param+'_'+instrument)
+                elif options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'GPAsteroseismology':
+                    for noise_param in ['lnomega','lnS','lnQ','lnA','epsilon','lnW','lnnu','lnDeltanu']:
+                        transit_params.append(noise_param+'_'+instrument)
+                        if parameters[noise_param+'_'+instrument]['type'] == 'FIXED':
+                            transit_params.pop(transit_params.index(noise_param+'_'+instrument))
+                        elif parameters[noise_param+'_'+instrument]['type'] in prior_distributions:
+                            parameters_to_check.append(noise_param+'_'+instrument)
+                            
+        else:
+            for par in ['P','t0','a','p','inc','sigma_w','q1','q2']:
+                 if parameters[par]['type'] == 'FIXED':
+                     transit_params.pop(transit_params.index(par))
+                 elif parameters[par]['type'] in prior_distributions:
+                    parameters_to_check.append(par)
+            if options['photometry'][options['photometry'].keys()[0]]['PHOT_NOISE_MODEL'] == 'flicker':
+                if parameters['sigma_r']['type'] == 'FIXED':
+                    transit_params.pop(transit_params.index('sigma_r'))
+                elif parameters['sigma_r']['type'] in prior_distributions:
+                    parameters_to_check.append('sigma_r')
+            elif options['photometry'][options['photometry'].keys()[0]]['PHOT_NOISE_MODEL'] == 'GPExpSquaredKernel':
+                transit_params.pop(transit_params.index('sigma_r'))
+                for noise_param in ['lnh','lnlambda']:
+                    transit_params.append(noise_param)
+                    if parameters[noise_param]['type'] == 'FIXED':
+                        transit_params.pop(transit_params.index(noise_param))
+                    elif parameters[noise_param]['type'] in prior_distributions:
+                        parameters_to_check.append(noise_param)
+            elif options['photometry'][options['photometry'].keys()[0]]['PHOT_NOISE_MODEL'] == 'GPGranulation':
+                transit_params.pop(transit_params.index('sigma_r'))
+                for noise_param in ['lnomega','lnS']:
+                    transit_params.append(noise_param)
+                    if parameters[noise_param]['type'] == 'FIXED':
+                        transit_params.pop(transit_params.index(noise_param))
+                    elif parameters[noise_param]['type'] in prior_distributions:
+                        parameters_to_check.append(noise_param)
+            elif options['photometry'][options['photometry'].keys()[0]]['PHOT_NOISE_MODEL'] == 'GPAsteroseismology':
+                transit_params.pop(transit_params.index('sigma_r'))
+                for noise_param in ['lnomega','lnS','lnQ','lnA','epsilon','lnW','lnnu','lnDeltanu']:
+                    transit_params.append(noise_param)
+                    if parameters[noise_param]['type'] == 'FIXED':
+                        transit_params.pop(transit_params.index(noise_param))
+                    elif parameters[noise_param]['type'] in prior_distributions:
+                        parameters_to_check.append(noise_param)
+            else:
+                transit_params.pop(transit_params.index('sigma_r'))
+
+    if options['MODE'] != 'transit' and options['MODE'] != 'transit_noise':
         if parameters['K']['type'] == 'FIXED':
             rv_params.pop(rv_params.index('K'))
-        elif parameters['K']['type'] in ['Uniform','Jeffreys']:
+        elif parameters['K']['type'] in prior_distributions:
             parameters_to_check.append('K')
         if len(all_rv_instruments)>1:
             sigma_w_rv = {}
             for instrument in all_rv_instruments:
-                if parameters['mu_'+instrument]['type'] == 'FIXED':
-                    rv_params.pop(rv_params.index('mu_'+instrument))
-                elif parameters['mu_'+instrument]['type'] in ['Uniform','Jeffreys']:
-                    parameters_to_check.append('mu_'+instrument)
-                if parameters['sigma_w_rv_'+instrument]['type'] == 'FIXED':
-                    rv_params.pop(rv_params.index('sigma_w_rv_'+instrument))       
-                elif parameters['sigma_w_rv_'+instrument]['type'] in ['Uniform','Jeffreys']:
-                    parameters_to_check.append('sigma_w_rv_'+instrument)
-                else: 
-                    sigma_w_rv[instrument] = 0.0 
-                    rv_params.pop(rv_params.index('sigma_w_rv_'+instrument))
+                sufix[instrument] = {}
+                for par in ['mu','sigma_w_rv']:
+                    orig_par = par
+                    sufix[instrument][orig_par] = ''
+                    if par not in parameters.keys():
+                        par = par+'_'+instrument
+                        sufix[instrument][orig_par] = '_'+instrument
+                        if par not in parameters.keys():
+                            print 'Error: parameter '+orig_par+' not defined. Exiting...'
+                            sys.exit()
+                    if par not in rv_params:
+                        rv_params.append(par)
+                    if parameters[par]['type'] == 'FIXED':
+                        rv_params.pop(rv_params.index(par))
+                    elif parameters[par]['type'] in prior_distributions:
+                        if par not in parameters_to_check:
+                            parameters_to_check.append(par)
         else:
             if parameters['K']['type'] == 'FIXED':
                 rv_params.pop(rv_params.index('K'))
-            elif parameters['K']['type'] in ['Uniform','Jeffreys']:
+            elif parameters['K']['type'] in prior_distributions:
                 parameters_to_check.append('K')
-            if parameters['sigma_w_rv']['type'] == 'FIXED':
-                rv_params.pop(rv_params.index('sigma_w_rv'))
-            elif parameters['sigma_w_rv']['type'] in ['Uniform','Jeffreys']:
-                parameters_to_check.append('sigma_w_rv')
-            else:
-                sigma_w_rv = 0.0
-                rv_params.pop(rv_params.index('sigma_w_rv'))
-
-    if mode == 'transit':
-       all_mcmc_params = transit_params + common_params
-    elif mode == 'rv':
-       all_mcmc_params = rv_params + common_params
-    elif mode == 'transit_noise':
-       all_mcmc_params = ['sigma_w','sigma_r']
+            for rvpar in ['sigma_w_rv','mu']:
+                if parameters[rvpar]['type'] in prior_distributions:
+                    parameters_to_check.append(rvpar)
+                    rv_params.append(rvpar)
+                elif parameters[rvpar]['type'] != 'FIXED':
+                    rv_params.append(rvpar)
+    if options['MODE'] == 'transit':
+            all_mcmc_params = transit_params + common_params
+    elif options['MODE'] == 'rv':
+            all_mcmc_params = rv_params + common_params
+    elif options['MODE'] == 'transit_noise':
+            all_mcmc_params = []
+            parameters_to_check = []
+            if options['photometry'][options['photometry'].keys()[0]]['PHOT_NOISE_MODEL'] == 'white':
+                noise_parameters = ['sigma_w']
+            if options['photometry'][options['photometry'].keys()[0]]['PHOT_NOISE_MODEL'] == 'flicker':
+                noise_parameters = ['sigma_w','sigma_r']
+            elif options['photometry'][options['photometry'].keys()[0]]['PHOT_NOISE_MODEL'] == 'GPExpSquaredKernel':
+                noise_parameters in ['lnh','lnlambda','sigma_w']
+            elif options['photometry'][options['photometry'].keys()[0]]['PHOT_NOISE_MODEL'] == 'GPGranulation':
+                noise_parameters = ['lnomega','lnS','sigma_w']
+            elif options['photometry'][options['photometry'].keys()[0]]['PHOT_NOISE_MODEL'] == 'GPAsteroseismology':
+                noise_parameters = ['lnomega','lnS','lnQ','lnA','epsilon','lnW','lnnu','lnDeltanu','sigma_w']
+            for noise_param in noise_parameters:
+                    all_mcmc_params.append(noise_param)
+                    if parameters[noise_param]['type'] == 'FIXED':
+                        all_mcmc_params.pop(all_mcmc_params.index(noise_param))
+                    elif parameters[noise_param]['type'] in prior_distributions:
+                        parameters_to_check.append(noise_param) 
     else:
-       all_mcmc_params = transit_params + rv_params + common_params
+            all_mcmc_params = transit_params + rv_params + common_params
 
     n_params = len(all_mcmc_params)
     log2pi = np.log(2.*np.pi)
-
     def normal_like(x,mu,tau):
         return 0.5*(np.log(tau) - log2pi - tau*( (x-mu)**2))
 
@@ -425,49 +545,229 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
                       k=k+1
         return like
 
+    def get_sq_exp_likelihood(t,residuals,errors,sigma_w,lnh,lnlambda):
+        kernel = (np.exp(lnh)**2)*george.kernels.ExpSquaredKernel(np.exp(lnlambda)**2)
+        gp = george.GP(kernel,solver=george.HODLRSolver)
+        try:
+            gp.compute(t,np.sqrt(errors**2 + sigma_w**2))
+        except:
+            return -np.inf
+        return gp.lnlikelihood(residuals)
+
+    def get_granulation_likelihood(t,residuals,errors,sigma_w,lnomega,lnS):
+        bounds = dict(log_S0=(-1e15, 1e15), log_Q=(-1e15, 1e15), log_omega0=(-1e15, 1e15),log_sigma=(-1e15,1e15))
+        kernel = terms.SHOTerm(log_S0=lnS, log_Q=np.log(1./np.sqrt(2.)), log_omega0=lnomega,\
+                                   bounds=bounds)
+        kernel.freeze_parameter("log_Q")
+        kernel += terms.JitterTerm(log_sigma=np.log(sigma_w),\
+                  bounds=bounds)
+        gp = celerite.GP(kernel, mean=np.mean(residuals))
+        try:
+            gp.compute(t,errors)
+        except:
+            return -np.inf
+        return gp.log_likelihood(residuals)
+
+    def get_asteroseismology_likelihood(t,residuals,errors,sigma_w,lnomega,lnS,lnQ,lnA,epsilon,\
+                                        lnW,lnnu,lnDeltanu,instrument):
+        bounds = dict(log_S0=(-1e15, 1e15), log_Q=(-1e15, 1e15), log_omega0=(-1e15, 1e15),log_sigma=(-1e15,1e15))
+        # First, the granulation noise component:
+        kernel = terms.SHOTerm(log_S0=lnS, log_Q=np.log(1./np.sqrt(2.)), log_omega0=lnomega,\
+                                   bounds=bounds)
+        kernel.freeze_parameter("log_Q")
+
+        # Next, the frequency kernels:
+        nu = np.exp(lnnu)
+        Deltanu = np.exp(lnDeltanu)
+        W = np.exp(lnW)
+        n = options['photometry'][instrument]["NASTEROSEISMOLOGY"]
+        for j in range(-(n-1)/2,(n-1)/2+1):
+            lnSj = lnA - 2.*lnQ - (j*Deltanu+epsilon)**2/(2.*(W**2))
+            wj = 2.*np.pi*(nu+j*Deltanu+epsilon)*0.0864 # Last factor converts from muHz to 1/day (assuming t is in days)
+            if wj>0.:
+                kernel += terms.SHOTerm(log_S0=lnSj, log_Q=lnQ, log_omega0=np.log(wj),
+                            bounds=bounds)
+            else:
+                return -np.inf
+
+        # Finally, a "jitter" term component for the photometric noise:
+        kernel += terms.JitterTerm(log_sigma=np.log(sigma_w),\
+                  bounds=bounds)
+
+        # Set the GP:
+        gp = celerite.GP(kernel, mean=np.mean(residuals))
+        try:
+            gp.compute(t,errors)
+            lnlike = gp.log_likelihood(residuals)
+        except:
+            return -np.inf
+
+        # Return the likelihood:
+        if not np.isnan(lnlike):
+            return lnlike
+        else:
+            return -np.inf
+
+    def lnlike_transit_noise(gamma=1.0):
+            residuals = (yt-1.0)*1e6
+            if options['photometry'][the_instrument]['PHOT_NOISE_MODEL'] == 'flicker':
+               log_like = get_fn_likelihood(residuals,parameters['sigma_w']['object'].value,\
+                               parameters['sigma_r']['object'].value)
+            elif options['photometry'][the_instrument]['PHOT_NOISE_MODEL'] == 'GPExpSquaredKernel':
+               log_like = get_sq_exp_likelihood(xt,residuals,yerrt*1e6,\
+                              parameters['sigma_w']['object'].value,\
+                              parameters['lnh']['object'].value,\
+                              parameters['lnlambda']['object'].value)
+            elif options['photometry'][the_instrument]['PHOT_NOISE_MODEL'] == 'GPGranulation':
+               log_like = get_granulation_likelihood(xt,residuals,yerrt*1e6,\
+                              parameters['sigma_w']['object'].value,\
+                              parameters['lnomega']['object'].value,\
+                              parameters['lnS']['object'].value)
+            elif options['photometry'][the_instrument]['PHOT_NOISE_MODEL'] == 'GPAsteroseismology':
+               log_like = get_asteroseismology_likelihood(xt,residuals,yerrt*1e6,\
+                              parameters['sigma_w']['object'].value,\
+                              parameters['lnomega']['object'].value,\
+                              parameters['lnS']['object'].value,\
+                              parameters['lnQ']['object'].value,\
+                              parameters['lnA']['object'].value,\
+                              parameters['epsilon']['object'].value,\
+                              parameters['lnW']['object'].value,\
+                              parameters['lnnu']['object'].value,\
+                              parameters['lnDeltanu']['object'].value,\
+                              the_instrument)
+            else:
+               taus = 1.0/((yerrt*1e6)**2 + (parameters['sigma_w']['object'].value)**2)
+               log_like = -0.5*(n_data_trs[0]*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
+            return log_like
+
     def lnlike_transit(gamma=1.0):
-        coeff1,coeff2 = reverse_ld_coeffs(ld_law, \
-                        parameters['q1']['object'].value,parameters['q2']['object'].value)
-        params.t0 = parameters['t0']['object'].value
-        params.per = parameters['P']['object'].value
-        params.rp = parameters['p']['object'].value
-        params.a = parameters['a']['object'].value
-        params.inc = parameters['inc']['object'].value
-        params.ecc = parameters['ecc']['object'].value
-        params.w = parameters['omega']['object'].value
-        params.u = [coeff1,coeff2]
-        model = m.light_curve(params)
-        if resampling:
-           for i in range(len(idx_resampling)):
-               transit_flat[idx_resampling[i]] = np.mean(model[i*N_resampling:N_resampling*(i+1)])
-           residuals = (yt-transit_flat)*1e6
+        if len(all_tr_instruments) == 1:
+            coeff1,coeff2 = reverse_ld_coeffs(options['photometry'][the_instrument]['LD_LAW'], \
+                            parameters['q1']['object'].value,parameters['q2']['object'].value)
+            params[the_instrument].t0 = parameters['t0']['object'].value
+            params[the_instrument].per = parameters['P']['object'].value
+            params[the_instrument].rp = parameters['p']['object'].value
+            params[the_instrument].a = parameters['a']['object'].value
+            params[the_instrument].inc = parameters['inc']['object'].value
+            params[the_instrument].ecc = parameters['ecc']['object'].value
+            params[the_instrument].w = parameters['omega']['object'].value
+            params[the_instrument].u = [coeff1,coeff2]
+            model = m[the_instrument].light_curve(params[the_instrument])
+            if options['photometry'][the_instrument]['RESAMPLING']:
+               for i in range(len(idx_resampling[the_instrument])):
+                   transit_flat[the_instrument][idx_resampling[the_instrument][i]] = \
+                   np.mean(model[i*options['photometry'][the_instrument]['NRESAMPLING']:options['photometry'][the_instrument]['NRESAMPLING']*(i+1)])
+               residuals = (yt-transit_flat[the_instrument])*1e6
+            else:
+               residuals = (yt-model)*1e6
+            if options['photometry'][the_instrument]['PHOT_NOISE_MODEL'] == 'flicker':
+               log_like = get_fn_likelihood(residuals,parameters['sigma_w']['object'].value,\
+                               parameters['sigma_r']['object'].value)
+            elif options['photometry'][the_instrument]['PHOT_NOISE_MODEL'] == 'GPExpSquaredKernel':
+               log_like = get_sq_exp_likelihood(xt,residuals,yerrt*1e6,\
+                              parameters['sigma_w']['object'].value,\
+                              parameters['lnh']['object'].value,\
+                              parameters['lnlambda']['object'].value)
+            elif options['photometry'][the_instrument]['PHOT_NOISE_MODEL'] == 'GPGranulation':
+               log_like = get_granulation_likelihood(xt,residuals,yerrt*1e6,\
+                              parameters['sigma_w']['object'].value,\
+                              parameters['lnomega']['object'].value,\
+                              parameters['lnS']['object'].value)
+            elif options['photometry'][the_instrument]['PHOT_NOISE_MODEL'] == 'GPAsteroseismology':
+               log_like = get_asteroseismology_likelihood(xt,residuals,yerrt*1e6,\
+                              parameters['sigma_w']['object'].value,\
+                              parameters['lnomega']['object'].value,\
+                              parameters['lnS']['object'].value,\
+                              parameters['lnQ']['object'].value,\
+                              parameters['lnA']['object'].value,\
+                              parameters['epsilon']['object'].value,\
+                              parameters['lnW']['object'].value,\
+                              parameters['lnnu']['object'].value,\
+                              parameters['lnDeltanu']['object'].value,\
+                              the_instrument)
+            else:
+               taus = 1.0/((yerrt*1e6)**2 + (parameters['sigma_w']['object'].value)**2)
+               log_like = -0.5*(n_data_trs[0]*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
+            #print 'Median residuals:',np.median(residuals)
+            #print 'Transit log-like:',log_like
+            return log_like
         else:
-           residuals = (yt-model)*1e6
-        if noise_model == 'flicker':
-           log_like = get_fn_likelihood(residuals,parameters['sigma_w']['object'].value,\
-                           parameters['sigma_r']['object'].value)
-        else:
-           taus = 1.0/((yerrt*1e6)**2 + (parameters['sigma_w']['object'].value)**2)
-           log_like = -0.5*(n_data_transit*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
-        return log_like
+            log_like = 0.0
+            for k in range(len(all_tr_instruments)):
+                instrument = all_tr_instruments[k]
+                coeff1,coeff2 = reverse_ld_coeffs(options['photometry'][instrument]['LD_LAW'], \
+                                parameters['q1'+sufix[instrument]['q1']]['object'].value,\
+                                parameters['q2'+sufix[instrument]['q2']]['object'].value)
+                params[instrument].t0 = parameters['t0'+sufix[instrument]['t0']]['object'].value
+                params[instrument].per = parameters['P']['object'].value
+                params[instrument].rp = parameters['p'+sufix[instrument]['p']]['object'].value
+                params[instrument].a = parameters['a'+sufix[instrument]['a']]['object'].value
+                params[instrument].inc = parameters['inc']['object'].value
+                params[instrument].ecc = parameters['ecc']['object'].value
+                params[instrument].w = parameters['omega']['object'].value
+                params[instrument].u = [coeff1,coeff2]
+                model = m[instrument].light_curve(params[instrument])
+                if options['photometry'][instrument]['RESAMPLING']:
+                   for i in range(len(idx_resampling[instrument])):
+                       transit_flat[instrument][idx_resampling[instrument][i]] = \
+                       np.mean(model[i*options['photometry'][instrument]['NRESAMPLING']:options['photometry'][instrument]['NRESAMPLING']*(i+1)])
+                   residuals = (yt[all_tr_instruments_idxs[k]]-transit_flat[instrument])*1e6
+                else:
+                   residuals = (yt[all_tr_instruments_idxs[k]]-model)*1e6
+                if options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'flicker':
+                   log_like = log_like + get_fn_likelihood(residuals,parameters['sigma_w'+sufix[instrument]['sigma_w']]['object'].value,\
+                                   parameters['sigma_r'+sufix[instrument]['sigma_r']]['object'].value)
+                elif options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'GPExpSquaredKernel':
+                   log_like = log_like + get_sq_exp_likelihood(xt[all_tr_instruments_idxs[k]],residuals,yerrt[all_tr_instruments_idxs[k]]*1e6,\
+                              parameters['sigma_w'+sufix[instrument]['sigma_w']]['object'].value,\
+                              parameters['lnh'+sufix[instrument]['lnh']]['object'].value,\
+                              parameters['lnlambda'+sufix[instrument]['lnlambda']]['object'].value)
+                elif options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'GPGranulation':
+                   log_like = log_like + get_granulation_likelihood(xt[all_tr_instruments_idxs[k]],residuals,yerrt[all_tr_instruments_idxs[k]]*1e6,\
+                              parameters['sigma_w'+sufix[instrument]['sigma_w']]['object'].value,\
+                              parameters['lnomega'+sufix[instrument]['lnomega']]['object'].value,\
+                              parameters['lnS'+sufix[instrument]['lnS']]['object'].value)
+                elif options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'GPAsteroseismology':
+                   log_like = log_like + get_asteroseismology_likelihood(xt[all_tr_instruments_idxs[k]],residuals,yerrt[all_tr_instruments_idxs[k]]*1e6,\
+                              parameters['sigma_w'+sufix[instrument]['sigma_w']]['object'].value,\
+                              parameters['lnomega'+sufix[instrument]['lnomega']]['object'].value,\
+                              parameters['lnS'+sufix[instrument]['lnS']]['object'].value,\
+                              parameters['lnQ'+sufix[instrument]['lnQ']]['object'].value,\
+                              parameters['lnA'+sufix[instrument]['lnA']]['object'].value,\
+                              parameters['epsilon'+sufix[instrument]['epsilon']]['object'].value,\
+                              parameters['lnW'+sufix[instrument]['lnW']]['object'].value,\
+                              parameters['lnnu'+sufix[instrument]['lnnu']]['object'].value,\
+                              parameters['lnDeltanu'+sufix[instrument]['lnDeltanu']]['object'].value,\
+                              instrument)
+                else:
+                   taus = 1.0/((yerrt[all_tr_instruments_idxs[k]]*1e6)**2 + (parameters['sigma_w'+sufix[instrument]['sigma_w']]['object'].value)**2)
+                   log_like = log_like - 0.5*(n_data_trs[k]*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
+            return log_like
+            
 
     def lnlike_rv():
+        #print 'RVs:'
+        #print 'mu',parameters['mu']['object'].value
+        #print 'K',parameters['K']['object'].value
+        #print 'ecc',parameters['ecc']['object'].value
         if len(all_rv_instruments) == 1:
             model = rv_model.pl_rv_array(xrv,parameters['mu']['object'].value,parameters['K']['object'].value,\
                             parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
                             parameters['t0']['object'].value,parameters['P']['object'].value)
             residuals = (yrv-model)
+            #print 'Median residuals:',np.median(residuals)
             taus = 1.0/((yerrrv)**2 + (parameters['sigma_w_rv']['object'].value)**2)
             log_like = -0.5*(n_data_rvs[0]*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
+            #print 'RV log-like:',log_like
             return log_like
         else:
             log_like = 0.0
             for i in range(len(all_rv_instruments)):
-                model = rv_model.pl_rv_array(xrv[all_rv_instruments_idxs[i]],parameters['mu_'+all_rv_instruments[i]]['object'].value,\
+                model = rv_model.pl_rv_array(xrv[all_rv_instruments_idxs[i]],parameters['mu'+sufix[all_rv_instruments[i]]['mu']]['object'].value,\
                                 parameters['K']['object'].value, parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
                                 parameters['t0']['object'].value,parameters['P']['object'].value)
                 residuals = (yrv[all_rv_instruments_idxs[i]]-model)
-                taus = 1.0/((yerrrv[all_rv_instruments_idxs[i]])**2 + (parameters['sigma_w_rv_'+all_rv_instruments[i]]['object'].value)**2)
+                taus = 1.0/((yerrrv[all_rv_instruments_idxs[i]])**2 + (parameters['sigma_w_rv'+sufix[all_rv_instruments[i]]['sigma_w_rv']]['object'].value)**2)
                 log_like = log_like -0.5*(n_data_rvs[i]*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
             return log_like
 
@@ -489,7 +789,8 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
         lp = lnprior(theta)
         if not np.isfinite(lp):
             return -np.inf
-        return lp + lnlike_rv() + lnlike_transit()
+        lnrv = lnlike_rv()
+        return lp + lnrv + lnlike_transit()
 
     def lnprob_transit(theta):
         lp = lnprior(theta)
@@ -497,62 +798,110 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
             return -np.inf
         return lp + lnlike_transit()
 
+    def lnprob_transit_noise(theta):
+        lp = lnprior(theta)
+        if not np.isfinite(lp):
+            return -np.inf
+        return lp + lnlike_transit_noise()
+
     def lnprob_rv(theta):
         lp = lnprior(theta)
         if not np.isfinite(lp):
             return -np.inf
         return lp + lnlike_rv()
 
-    def lnprob_transit_noise(theta):
-        lp = lnprior(theta)
-        if not np.isfinite(lp):
-            return -np.inf
-
-        residuals = (yt-1.0)*1e6
-        log_like = get_fn_likelihood(residuals,parameters['sigma_w']['object'].value,\
-                                     parameters['sigma_r']['object'].value)
-        return lp + log_like
-
     # Define the posterior to use:
-    if mode == 'full':
+    if options['MODE'] == 'full':
         lnprob = lnprob_full 
-    elif mode == 'transit':
+    elif options['MODE'] == 'transit':
         lnprob = lnprob_transit
-    elif mode == 'rv':
-        lnprob = lnprob_rv
-    elif mode == 'transit_noise':
+    elif options['MODE'] == 'transit_noise':
         lnprob = lnprob_transit_noise
+    elif options['MODE'] == 'rv':
+        lnprob = lnprob_rv
     else:
         print 'Mode not supported. Doing nothing.'
 
     # If already not done, get posterior samples:
     if len(parameters[all_mcmc_params[0]]['object'].posterior) == 0:
-        # Extract initial input values of the parameters to be fitted:
-        theta_0 = []
-        for i in range(n_params):
-            theta_0.append(parameters[all_mcmc_params[i]]['object'].value)
+        # Make a first MCMC run to search for optimal parameter values 
+        # in (almost) all the parameter space defined by the priors if 
+        # no initial guess is given:
+        ndim = n_params
+        pos = []
+        for j in range(200):
+            while True:
+                theta_vector = np.array([])
+                for i in range(n_params):
+                    current_parameter = all_mcmc_params[i]
+                    # If parameter has a guess, sample a value from prior distribution, multiply it by 1e-3 and 
+                    # add it to the real value (this is just to have the walkers move around a sphere around the 
+                    # guess with orders of magnitude defined by the prior). If no initial guess, sample from the 
+                    # prior:
+                    if parameters[current_parameter]['object'].has_guess:
+                        theta_vector = np.append(theta_vector,parameters[current_parameter]['object'].init_value + \
+                                                 (parameters[current_parameter]['object'].init_value-\
+                                                  parameters[current_parameter]['object'].sample())*1e-3)
+                    else:
+                        theta_vector = np.append(theta_vector,parameters[current_parameter]['object'].sample())
+                lnprob(theta_vector)
+                val = lnprob(theta_vector)
+                try:
+                    val = lnprob(theta_vector)
+                except:
+                    val = np.inf
+                if np.isfinite(val):
+                    break
+            pos.append(theta_vector)
 
-        # Start at the maximum likelihood value:
-        nll = lambda *args: -lnprob(*args)
+        # Run the sampler for a bit (300 walkers, 300 jumps, 300 burnin):
+        print '\t Starting first iteration run...'
+        sampler = emcee.EnsembleSampler(200, ndim, lnprob)
+        sampler.run_mcmc(pos, 200)
 
-        # Get ML estimate:
-        result = op.minimize(nll, theta_0)
-        theta_ml = result["x"]
+        # Now sample the walkers around the values found in previous iteration:
+        pos = []
+        first_time = True
+        init_vals = np.zeros(n_params)
+        init_vals_sigma = np.zeros(n_params)
+        for j in range(options['NWALKERS']):
+            while True:
+                theta_vector = np.array([])
+                for i in range(n_params):
+                    if first_time:
+                        c_p_chain = np.array([])
+                        for walker in range(200):
+                            c_p_chain = np.append(c_p_chain,sampler.chain[walker,100:,i])
+                        init_vals[i] = np.median(c_p_chain)
+                        init_vals_sigma[i] = get_sigma(c_p_chain,np.median(c_p_chain))
+                    current_parameter = all_mcmc_params[i]
+                    # Put the walkers around a small gaussian sphere centered on the best value 
+                    # found in previous iteration. Walkers will run away from sphere eventually:
+                    theta_vector = np.append(theta_vector,np.random.normal(init_vals[i],\
+                                                                           init_vals_sigma[i]*1e-3))
+                if first_time:
+                    first_time = False
+                try:
+                    val = lnprob(theta_vector)
+                except:
+                    val = np.inf
+                if np.isfinite(val):
+                    break
+            pos.append(theta_vector)
 
-        # Now define parameters for emcee:
-        ndim = len(theta_ml)
-        pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
-        # Run the MCMC:
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob)
+        # Run the (final) MCMC:
+        print '\t Done! Starting MCMC...'
+        sampler = emcee.EnsembleSampler(options['NWALKERS'], ndim, lnprob)
 
-        sampler.run_mcmc(pos, njumps+nburnin)
+        sampler.run_mcmc(pos, options['NJUMPS']+options['NBURNIN'])
 
+        print '\t Done! Saving...'
         # Save the parameter chains for the parameters that were actually varied:
         for i in range(n_params):
             c_param = all_mcmc_params[i]
             c_p_chain = np.array([])
-            for walker in range(nwalkers):
-                c_p_chain = np.append(c_p_chain,sampler.chain[walker,nburnin:,i])
+            for walker in range(options['NWALKERS']):
+                c_p_chain = np.append(c_p_chain,sampler.chain[walker,options['NBURNIN']:,i])
             parameters[c_param]['object'].set_posterior(np.copy(c_p_chain))
 
     # When done or if MCMC already performed, save results:
@@ -648,8 +997,478 @@ def plot_transit(t,f,parameters,ld_law,transit_instruments,\
     plt.plot(phases,(f-model_pred) + (1-2.5*p**2),'.',color='black',alpha=0.4)
     plt.show()
 
-def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,transit_instruments,rv_instruments,\
-                        resampling = False, phase_max = 0.025, texp = 0.01881944, N_resampling = 5):
+def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, rv, rv_err, rv_instruments,\
+                       parameters, idx_resampling, options, texp = 0.01881944):
+    # Generate out_dir folder name (for saving residuals, models, etc.):
+    mode = options['MODE']
+    target = options['TARGET']
+    fname = target+'_'+mode+'_'
+    for instrument in options['photometry'].keys():
+        fname = fname + instrument +'_'+options['photometry'][instrument]['PHOT_NOISE_MODEL']+\
+                      '_'+options['photometry'][instrument]['LD_LAW']+'_'
+    out_dir = 'results/'+fname[:-1]+'/'
+
+    plt.title('exonailer final fit + data')
+    # If mode is not RV:
+    if options['MODE'] != 'rv':
+        params = {}
+        m = {}
+        t_resampling = {}
+        transit_flat = {}
+        # Count instruments:
+        all_tr_instruments,all_tr_instruments_idxs,n_data_trs = count_instruments(tr_instruments)
+        # Prepare data for batman:
+        xt = times.astype('float64')
+        yt = relative_flux.astype('float64')
+        yerrt = error.astype('float64')
+        for k in range(len(all_tr_instruments)):
+            instrument = all_tr_instruments[k]
+            params[instrument],m[instrument] = init_batman(xt[all_tr_instruments_idxs[k]],\
+                                               law=options['photometry'][instrument]['LD_LAW'])
+            # Initialize the parameters of the transit model, 
+            # and prepare resampling data if resampling is True:
+            if options['photometry'][instrument]['RESAMPLING']:
+               t_resampling[instrument] = np.array([])
+               for i in range(len(idx_resampling[instrument])):
+                   tij = np.zeros(options['photometry'][instrument]['NRESAMPLING'])
+                   for j in range(1,options['photometry'][instrument]['NRESAMPLING']+1):
+                       # Eq (35) in Kipping (2010)    
+                       tij[j-1] = xt[all_tr_instruments_idxs[k]][idx_resampling[instrument][i]] + ((j - \
+                                  ((options['photometry'][instrument]['NRESAMPLING']+1)/2.))*(texp/np.double(\
+                                  options['photometry'][instrument]['NRESAMPLING'])))
+                   t_resampling[instrument] = np.append(t_resampling[instrument], np.copy(tij))
+
+               params[instrument],m[instrument] = init_batman(t_resampling[instrument],\
+                                                  law=options['photometry'][instrument]['LD_LAW'])
+               transit_flat[instrument] = np.ones(len(xt[all_tr_instruments_idxs[k]]))
+               transit_flat[instrument][idx_resampling[instrument]] = np.zeros(len(idx_resampling[instrument]))
+
+    # Initialize the variable names:
+    if len(all_tr_instruments)>1:
+        transit_params = ['P','inc']
+    else:
+        the_instrument = options['photometry'].keys()[0]
+        transit_params = ['P','inc','t0','a','p','inc','sigma_w','sigma_r','q1','q2']
+    common_params = ['ecc','omega']
+
+    # If mode is not transit, prepare the data too:
+    if 'transit' not in options['MODE']:
+       xrv = times_rv.astype('float64')
+       yrv = rv.astype('float64')
+       if rv_err is None:
+           yerrrv = 0.0
+       else:
+           yerrrv = rv_err.astype('float64')
+       all_rv_instruments,all_rv_instruments_idxs,n_data_rvs = count_instruments(rv_instruments)
+       rv_params = ['K']
+
+       #if len(all_rv_instruments)>1:
+       #   for instrument in all_rv_instruments:
+       #       rv_params.append('mu_'+instrument)
+       #       rv_params.append('sigma_w_rv_'+instrument)
+       #else:
+       #   rv_params.append('mu')
+       #   rv_params.append('sigma_w_rv')
+
+    # Create lists that will save parameters to check the limits on:
+    parameters_to_check = []
+
+    # Check common parameters:
+    if parameters['ecc']['type'] == 'FIXED':
+       common_params.pop(common_params.index('ecc'))
+    elif parameters['ecc']['type'] in prior_distributions:
+       parameters_to_check.append('ecc')
+
+    if parameters['omega']['type'] == 'FIXED':
+       common_params.pop(common_params.index('omega'))
+    elif parameters['omega']['type'] in prior_distributions:
+       parameters_to_check.append('omega')
+
+    # Eliminate from the parameter list parameters that are being fixed:
+    # First, generate a sufix dictionary, which will add the sufix _instrument to 
+    # each instrument in the MCMC, in order to keep track of the parameters that 
+    # are being held constant between instruments and those that vary with instrument:
+    sufix = {}
+    if options['MODE'] != 'rv':
+        if len(all_tr_instruments)>1:
+            # First, generate a sufix dictionary, which will add the sufix _instrument to 
+            # each instrument in the MCMC, in order to keep track of the parameters that 
+            # are being held constant between instruments and those that vary with instrument:
+            sufix = {}
+            # Check parameters that always will be constant amongst transits:
+            for par in ['P','inc']:
+                if parameters[par]['type'] == 'FIXED':
+                    transit_params.pop(transit_params.index(par))
+                elif parameters[par]['type'] in prior_distributions:
+                    parameters_to_check.append(par)
+
+            # Now check parameters that might change between instruments:
+            for i in range(len(all_tr_instruments)):
+                instrument = all_tr_instruments[i]
+                sufix[instrument] = {}
+                for par in ['t0','a','p','sigma_w','q1','q2']:
+                    orig_par = par
+                    sufix[instrument][orig_par] = ''
+                    if par not in parameters.keys():
+                        par = par+'_'+instrument
+                        sufix[instrument][orig_par] = '_'+instrument
+                        if par not in parameters.keys():
+                            print 'Error: parameter '+orig_par+' not defined. Exiting...'
+                            sys.exit()
+                    if par not in transit_params:
+                        transit_params.append(par)        
+                    if parameters[par]['type'] == 'FIXED':
+                        transit_params.pop(transit_params.index(par))
+                    elif parameters[par]['type'] in prior_distributions:
+                        parameters_to_check.append(par)
+                if options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'flicker':
+                    for noise_param in ['sigma_r']:
+                        transit_params.append(noise_param+'_'+instrument)
+                        if parameters[noise_param+'_'+instrument]['type'] == 'FIXED':
+                            transit_params.pop(transit_params.index(noise_param+'_'+instrument))
+                        elif parameters[noise_param+'_'+instrument]['type'] in prior_distributions:
+                            parameters_to_check.append(noise_param+'_'+instrument)
+                elif options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'GPExpSquaredKernel':
+                    for noise_param in ['lnh','lnlambda']:
+                        transit_params.append(noise_param+'_'+instrument)
+                        if parameters[noise_param+'_'+instrument]['type'] == 'FIXED':
+                            transit_params.pop(transit_params.index(noise_param+'_'+instrument))
+                        elif parameters[noise_param+'_'+instrument]['type'] in prior_distributions:
+                            parameters_to_check.append(noise_param+'_'+instrument)
+                elif options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'GPGranulation':
+                    for noise_param in ['lnomega','lnS']:
+                        transit_params.append(noise_param+'_'+instrument)
+                        if parameters[noise_param+'_'+instrument]['type'] == 'FIXED':
+                            transit_params.pop(transit_params.index(noise_param+'_'+instrument))
+                        elif parameters[noise_param+'_'+instrument]['type'] in prior_distributions:
+                            parameters_to_check.append(noise_param+'_'+instrument)
+                elif options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'GPAsteroseismology':
+                    for noise_param in ['lnomega','lnS','lnQ','lnA','epsilon','lnW','lnnu','lnDeltanu']:
+                        transit_params.append(noise_param+'_'+instrument)
+                        if parameters[noise_param+'_'+instrument]['type'] == 'FIXED':
+                            transit_params.pop(transit_params.index(noise_param+'_'+instrument))
+                        elif parameters[noise_param+'_'+instrument]['type'] in prior_distributions:
+                            parameters_to_check.append(noise_param+'_'+instrument)
+        else:
+            for par in ['P','t0','a','p','inc','sigma_w','q1','q2']:
+                 if parameters[par]['type'] == 'FIXED':
+                     transit_params.pop(transit_params.index(par))
+                 elif parameters[par]['type'] in prior_distributions:
+                    parameters_to_check.append(par)
+            if options['photometry'][options['photometry'].keys()[0]]['PHOT_NOISE_MODEL'] == 'flicker':
+                if parameters['sigma_r']['type'] == 'FIXED':
+                    transit_params.pop(transit_params.index('sigma_r'))
+                elif parameters['sigma_r']['type'] in prior_distributions:
+                    parameters_to_check.append('sigma_r')
+            elif options['photometry'][options['photometry'].keys()[0]]['PHOT_NOISE_MODEL'] == 'GPExpSquaredKernel':
+                transit_params.pop(transit_params.index('sigma_r'))
+                for noise_param in ['lnh','lnlambda']:
+                    transit_params.append(noise_param)
+            elif options['photometry'][options['photometry'].keys()[0]]['PHOT_NOISE_MODEL'] == 'GPGranulation':
+                transit_params.pop(transit_params.index('sigma_r'))
+                for noise_param in ['lnomega','lnS']:
+                    transit_params.append(noise_param)
+            elif options['photometry'][options['photometry'].keys()[0]]['PHOT_NOISE_MODEL'] == 'GPAsteroseismology':
+                transit_params.pop(transit_params.index('sigma_r'))
+                for noise_param in ['lnomega','lnS','lnQ','lnA','epsilon','lnW','lnnu','lnDeltanu']:
+                    transit_params.append(noise_param)
+            else:
+                transit_params.pop(transit_params.index('sigma_r'))
+    if options['MODE'] != 'transit':
+        if parameters['K']['type'] == 'FIXED':
+            rv_params.pop(rv_params.index('K'))
+        elif parameters['K']['type'] in prior_distributions:
+            parameters_to_check.append('K')
+        if len(all_rv_instruments)>1:
+            sigma_w_rv = {}
+            for instrument in all_rv_instruments:
+                sufix[instrument] = {}
+                for par in ['mu','sigma_w_rv']:
+                    orig_par = par
+                    sufix[instrument][orig_par] = ''
+                    if par not in parameters.keys():
+                        par = par+'_'+instrument
+                        sufix[instrument][orig_par] = '_'+instrument
+                        if par not in parameters.keys():
+                            print 'Error: parameter '+orig_par+' not defined. Exiting...'
+                            sys.exit()
+                    if par not in rv_params:
+                        rv_params.append(par)
+                    if parameters[par]['type'] == 'FIXED':
+                        rv_params.pop(rv_params.index(par))
+                    elif parameters[par]['type'] in prior_distributions:
+                        parameters_to_check.append(par)
+
+            #sigma_w_rv = {}
+            #for instrument in all_rv_instruments:
+            #    if parameters['mu_'+instrument]['type'] == 'FIXED':
+            #        rv_params.pop(rv_params.index('mu_'+instrument))
+            #    elif parameters['mu_'+instrument]['type'] in prior_distributions:
+            #        parameters_to_check.append('mu_'+instrument)
+            #    if parameters['sigma_w_rv_'+instrument]['type'] == 'FIXED':
+            #        rv_params.pop(rv_params.index('sigma_w_rv_'+instrument))
+            #    elif parameters['sigma_w_rv_'+instrument]['type'] in prior_distributions:
+            #        parameters_to_check.append('sigma_w_rv_'+instrument)
+            #    else:
+            #        sigma_w_rv[instrument] = 0.0
+            #        rv_params.pop(rv_params.index('sigma_w_rv_'+instrument))
+        else:
+            if parameters['K']['type'] == 'FIXED':
+                rv_params.pop(rv_params.index('K'))
+            elif parameters['K']['type'] in prior_distributions:
+                parameters_to_check.append('K')
+            for rvpar in ['sigma_w_rv','mu']:
+                if parameters[rvpar]['type'] in prior_distributions:
+                    parameters_to_check.append(rvpar)
+                    rv_params.append(rvpar)
+                elif parameters[rvpar]['type'] != 'FIXED':
+                    rv_params.append(rvpar)
+
+    if options['MODE'] == 'transit':
+       all_mcmc_params = transit_params + common_params
+    elif options['MODE'] == 'rv':
+       all_mcmc_params = rv_params + common_params
+    elif options['MODE'] == 'transit_noise':
+       all_mcmc_params = ['sigma_w','sigma_r']
+    else:
+       all_mcmc_params = transit_params + rv_params + common_params
+
+    # First, generate plot with gridspec according to the number of 
+    # instruments used for transits:
+    if options['MODE'] == 'full':
+        nrows = 3
+        ncols = len(all_tr_instruments)
+        gridspec.GridSpec(3,len(all_tr_instruments))
+    elif options['MODE'] == 'transit':
+        nrows = 1
+        ncols = len(all_tr_instruments)
+
+    gridspec.GridSpec(nrows,len(all_tr_instruments))
+    # Plot transits:
+    if len(all_tr_instruments) == 1:
+            plt.subplot2grid((nrows,ncols),(0,0),colspan=2)
+            coeff1,coeff2 = reverse_ld_coeffs(options['photometry'][the_instrument]['LD_LAW'], \
+                            parameters['q1']['object'].value,parameters['q2']['object'].value)
+            params[the_instrument].t0 = parameters['t0']['object'].value
+            params[the_instrument].per = parameters['P']['object'].value
+            params[the_instrument].rp = parameters['p']['object'].value
+            params[the_instrument].a = parameters['a']['object'].value
+            params[the_instrument].inc = parameters['inc']['object'].value
+            params[the_instrument].ecc = parameters['ecc']['object'].value
+            params[the_instrument].w = parameters['omega']['object'].value
+            params[the_instrument].u = [coeff1,coeff2]
+            model = m[the_instrument].light_curve(params[the_instrument])
+            model_t = np.linspace(np.min(xt),np.max(xt),len(xt)*4)
+            model_phase = get_phases(model_t,params[the_instrument].per,params[the_instrument].t0)
+            phase = get_phases(xt,params[the_instrument].per,params[the_instrument].t0)
+            if options['photometry'][the_instrument]['RESAMPLING']:
+               # Generate residuals for plot:
+               for i in range(len(idx_resampling[the_instrument])):
+                   transit_flat[the_instrument][idx_resampling[the_instrument][i]] = \
+                   np.mean(model[i*options['photometry'][the_instrument]['NRESAMPLING']:options['photometry'][the_instrument]['NRESAMPLING']*(i+1)])
+               residuals = (yt-transit_flat[the_instrument])
+               # Now model (resampled) transit:
+               idx_resampling_pred = np.where((model_phase>-options['photometry'][the_instrument]['PHASE_MAX_RESAMPLING'])&\
+                                              (model_phase<options['photometry'][the_instrument]['PHASE_MAX_RESAMPLING']))[0]
+               t_resampling_pred = np.array([])
+               for i in range(len(idx_resampling_pred)):
+                   tij = np.zeros(options['photometry'][the_instrument]['NRESAMPLING'])
+                   for j in range(1,options['photometry'][the_instrument]['NRESAMPLING']+1):
+                       tij[j-1] = model_t[idx_resampling_pred[i]] + ((j - ((options['photometry'][the_instrument]['NRESAMPLING']+1)/2.))*(texp/\
+                                  np.double(options['photometry'][the_instrument]['NRESAMPLING'])))
+                   t_resampling_pred = np.append(t_resampling_pred, np.copy(tij))
+               params2,m2 = init_batman(t_resampling_pred, law=options['photometry'][the_instrument]['LD_LAW'])
+               transit_flat_pred = np.ones(len(model_t))
+               transit_flat_pred[idx_resampling_pred] = np.zeros(len(idx_resampling_pred))
+               model = m2.light_curve(params[the_instrument])
+               for i in range(len(idx_resampling_pred)):
+                   transit_flat_pred[idx_resampling_pred[i]] = \
+                        np.mean(model[i*options['photometry'][the_instrument]['NRESAMPLING']:options['photometry'][the_instrument]['NRESAMPLING']*(i+1)])
+               model = transit_flat_pred
+            else:
+               residuals = (yt-model)
+               params2,m2 = init_batman(model_t, law=options['photometry'][the_instrument]['LD_LAW'])
+               model = m2.light_curve(params[the_instrument])
+            idx_phase = np.argsort(phase)
+            idx_model_phase = np.argsort(model_phase)
+            plt.plot(phase[idx_phase],yt[idx_phase],'.',color='black',alpha=0.4)
+            plt.plot(model_phase[idx_model_phase],model[idx_model_phase],'r-')
+            sigma = get_sigma(residuals[idx_phase],0.0)
+            plt.plot(phase[idx_phase],residuals[idx_phase]+(1-1.8*(parameters['p']['object'].value**2))-10*sigma,'.',color='black',alpha=0.4)
+            plt.title(the_instrument)
+            plt.ylabel('Relative flux')
+            plt.xlabel('Phase')
+            # Save phased model, data and residuals for the transit:
+            fout_model = open(out_dir+'tr_model.dat','w')
+            for i in idx_model_phase:
+                fout_model.write('{0:.10f} {1:.10f}\n'.format(model_phase[i],model[i]))
+            fout_model.close()
+            fout_data = open(out_dir+'tr_data.dat','w')
+            for i in range(len(idx_phase)):
+                fout_data.write('{0:.10f} {1:.10f} {2:.10f}\n'.format(xt[i],phase[i],yt[i]))
+            fout_data.close()
+            fout_res = open(out_dir+'tr_residuals.dat','w')
+            for i in range(len(idx_phase)):
+                fout_res.write('{0:.10f} {1:.10f} {2:.10f}\n'.format(xt[i],phase[i],residuals[i]))
+            fout_res.close()
+    else:
+            #sufix[instrument][orig_par]
+            for k in range(len(all_tr_instruments)):
+                plt.subplot2grid((nrows,ncols),(0,k))
+                if k == 0:
+                    plt.ylabel('Relative flux')
+                #plt.xlabel('Phase')
+                instrument = all_tr_instruments[k]
+                coeff1,coeff2 = reverse_ld_coeffs(options['photometry'][instrument]['LD_LAW'], \
+                                parameters['q1'+sufix[instrument]['q1']]['object'].value,\
+                                parameters['q2'+sufix[instrument]['q2']]['object'].value)
+                params[instrument].t0 = parameters['t0'+sufix[instrument]['t0']]['object'].value
+                params[instrument].per = parameters['P']['object'].value
+                params[instrument].rp = parameters['p'+sufix[instrument]['p']]['object'].value
+                params[instrument].a = parameters['a'+sufix[instrument]['a']]['object'].value
+                params[instrument].inc = parameters['inc']['object'].value
+                params[instrument].ecc = parameters['ecc']['object'].value
+                params[instrument].w = parameters['omega']['object'].value
+                params[instrument].u = [coeff1,coeff2]
+                model = m[instrument].light_curve(params[instrument])
+                model_t = np.linspace(np.min(xt[all_tr_instruments_idxs[k]]),np.max(xt[all_tr_instruments_idxs[k]]),len(all_tr_instruments_idxs[k])*4)
+                model_phase = get_phases(model_t,params[instrument].per,params[instrument].t0)
+                phase = get_phases(xt[all_tr_instruments_idxs[k]],params[instrument].per,params[instrument].t0)
+                if options['photometry'][instrument]['RESAMPLING']:
+                   for i in range(len(idx_resampling[instrument])):
+                       transit_flat[instrument][idx_resampling[instrument][i]] = \
+                       np.mean(model[i*options['photometry'][instrument]['NRESAMPLING']:options['photometry'][instrument]['NRESAMPLING']*(i+1)])
+                   residuals = (yt[all_tr_instruments_idxs[k]]-transit_flat[instrument])*1e6
+                   idx_resampling_pred = np.where((model_phase>-options['photometry'][instrument]['PHASE_MAX_RESAMPLING'])&\
+                                              (model_phase<options['photometry'][instrument]['PHASE_MAX_RESAMPLING']))[0]
+                   t_resampling_pred = np.array([])
+                   for i in range(len(idx_resampling_pred)):
+                       tij = np.zeros(options['photometry'][instrument]['NRESAMPLING'])
+                       for j in range(1,options['photometry'][instrument]['NRESAMPLING']+1):
+                           tij[j-1] = model_t[idx_resampling_pred[i]] + ((j - ((options['photometry'][instrument]['NRESAMPLING']+1)/2.))*(texp/\
+                                  np.double(options['photometry'][instrument]['NRESAMPLING'])))
+                       t_resampling_pred = np.append(t_resampling_pred, np.copy(tij))
+                   params2,m2 = init_batman(t_resampling_pred, law=options['photometry'][instrument]['LD_LAW'])
+                   transit_flat_pred = np.ones(len(model_t))
+                   transit_flat_pred[idx_resampling_pred] = np.zeros(len(idx_resampling_pred))
+                   model = m2.light_curve(params[instrument])
+                   for i in range(len(idx_resampling_pred)):
+                       transit_flat_pred[idx_resampling_pred[i]] = np.mean(model[i*options['photometry'][instrument]['NRESAMPLING']:\
+                                                                           options['photometry'][instrument]['NRESAMPLING']*(i+1)])
+                   model = transit_flat_pred
+
+                else:
+                   residuals = (yt[all_tr_instruments_idxs[k]]-model)*1e6    
+                   params2,m2 = init_batman(model_t, law=options['photometry'][instrument]['LD_LAW'])
+                   model = m2.light_curve(params[instrument])
+                idx_phase = np.argsort(phase)
+                idx_model_phase = np.argsort(model_phase)
+                plt.plot(phase[idx_phase],yt[all_tr_instruments_idxs[k]][idx_phase],'.',color='black',alpha=0.4)
+                plt.plot(model_phase[idx_model_phase],model[idx_model_phase],'r-')
+                sigma = get_sigma(residuals[idx_phase]*1e-6,0.0)
+                plt.plot(phase[idx_phase],residuals[idx_phase]*1e-6+(1-1.8*(parameters['p'+sufix[instrument]['p']]['object'].value**2))-3*sigma,'.',color='black',alpha=0.4)
+                plt.title(instrument)
+                # Save phased model, data and residuals for the transit:
+                fout_model = open(out_dir+'tr_model_'+instrument+'.dat','w')
+                for i in idx_model_phase:
+                    fout_model.write('{0:.10f} {1:.10f}\n'.format(model_phase[i],model[i]))
+                fout_model.close()
+                fout_data = open(out_dir+'tr_data_'+instrument+'.dat','w')
+                for i in range(len(idx_phase)):
+                    fout_data.write('{0:.10f} {1:.10f}\n'.format(phase[i],yt[i]))
+                fout_data.close()
+                fout_res = open(out_dir+'tr_residuals_'+instrument+'.dat','w')
+                for i in range(len(idx_phase)):
+                    fout_res.write('{0:.10f} {1:.10f}\n'.format(phase[i],residuals[i]))
+                fout_res.close()
+
+    # Plot RVs:
+    if options['MODE'] != 'transit':
+        if options['MODE'] == 'full':
+            plt.subplot2grid((nrows,ncols),(1,0),colspan=ncols)
+        if len(all_rv_instruments) == 1:
+            model = rv_model.pl_rv_array(xrv,parameters['mu']['object'].value,parameters['K']['object'].value,\
+                            parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
+                            parameters['t0']['object'].value,parameters['P']['object'].value)
+            residuals = (yrv-model)
+            model_t = parameters['t0']['object'].value + np.linspace(-0.5,0.5,500)*parameters['P']['object'].value
+            model_pred = rv_model.pl_rv_array(model_t,parameters['mu']['object'].value,parameters['K']['object'].value,\
+                            parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
+                            parameters['t0']['object'].value,parameters['P']['object'].value)
+            phase = get_phases(xrv,parameters['P']['object'].value,parameters['t0']['object'].value)
+            plt.errorbar(phase,(yrv-parameters['mu']['object'].value),yerr=rv_err,fmt='o',label=all_rv_instruments[0])
+            model_phase = get_phases(model_t,parameters['P']['object'].value,parameters['t0']['object'].value)
+            idx_rv_model = np.argsort(model_phase)
+            plt.plot(model_phase[idx_rv_model],model_pred[idx_rv_model]-parameters['mu']['object'].value)
+            plt.ylabel('Radial velocity')
+            plt.subplot2grid((3,len(all_tr_instruments)),(2,0),colspan=len(all_tr_instruments))
+            plt.errorbar(phase,residuals,rv_err,fmt='o')
+            plt.ylabel('RV Residuals')
+            plt.xlabel('Phase')
+            # Save phased model, data and residuals for the RVs:
+            fout_model = open(out_dir+'rv_model.dat','w')
+            for i in range(len(model_t)):
+                fout_model.write('{0:.10f} {1:.10f}\n'.format(model_phase[i],(model_pred-parameters['mu']['object'].value)[i]))
+            fout_model.close()
+            fout_data = open(out_dir+'rv_data.dat','w')
+            for i in range(len(phase)):
+                fout_data.write('{0:.10f} {1:.10f} {2:.10f}\n'.format(phase[i],((yrv-parameters['mu']['object'].value))[i],rv_err[i]))
+            fout_data.close()
+            fout_res = open(out_dir+'rv_residuals.dat','w')
+            for i in range(len(phase)):
+                fout_res.write('{0:.10f} {1:.10f} {2:.10f}\n'.format(phase[i],residuals[i],rv_err[i]))
+            fout_res.close()
+        else:
+            log_like = 0.0
+            all_residuals = []
+            all_phases = []
+            model_t = parameters['t0']['object'].value + np.linspace(-0.5,0.5,500)*parameters['P']['object'].value
+            model_pred = rv_model.pl_rv_array(model_t,0.0,\
+                                parameters['K']['object'].value, parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
+                                parameters['t0']['object'].value,parameters['P']['object'].value)
+            for i in range(len(all_rv_instruments)):
+                model = rv_model.pl_rv_array(xrv[all_rv_instruments_idxs[i]],parameters['mu_'+all_rv_instruments[i]]['object'].value,\
+                                parameters['K']['object'].value, parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
+                                parameters['t0']['object'].value,parameters['P']['object'].value)
+                residuals = (yrv[all_rv_instruments_idxs[i]]-model)
+                all_residuals.append(residuals)
+                phase = get_phases(xrv[all_rv_instruments_idxs[i]],parameters['P']['object'].value,parameters['t0']['object'].value)
+                all_phases.append(phase)
+                plt.errorbar(phase,(yrv[all_rv_instruments_idxs[i]]-parameters['mu_'+all_rv_instruments[i]]['object'].value),\
+                             yerr=rv_err[all_rv_instruments_idxs[i]],label=all_rv_instruments[i],fmt='o')
+                # Save data and residuals:
+                fout_data = open(out_dir+'rv_data_'+all_rv_instruments[i]+'.dat','w')
+                for ii in range(len(phase)):
+                    fout_data.write('{0:.10f} {1:.10f} {2:.10f}\n'.format(phase[ii],(yrv[all_rv_instruments_idxs[i]]-\
+                                    parameters['mu_'+all_rv_instruments[i]]['object'].value)[ii],rv_err[all_rv_instruments_idxs[i]][ii]))
+                fout_data.close()
+                fout_res = open(out_dir+'rv_residuals_'+all_rv_instruments[i]+'.dat','w')
+                for ii in range(len(phase)):
+                    fout_res.write('{0:.10f} {1:.10f} {2:.10f}\n'.format(phase[ii],residuals[ii],rv_err[all_rv_instruments_idxs[i]][ii]))
+            fout_res.close()
+            model_phase = get_phases(model_t,parameters['P']['object'].value,parameters['t0']['object'].value)
+            idx_rvs_sorted = np.argsort(model_phase)
+            plt.plot(model_phase[idx_rvs_sorted],model_pred[idx_rvs_sorted],'-',color='red')
+            # Save model:
+            fout_model = open(out_dir+'rv_model.dat','w')
+            for i in idx_rvs_sorted:
+                fout_model.write('{0:.10f} {1:.10f}\n'.format(model_phase[i],model_pred[i]))
+            fout_model.close()
+            plt.legend()
+            plt.ylabel('Radial velocity')
+            plt.subplot2grid((3,len(all_tr_instruments)),(2,0),colspan=len(all_tr_instruments))
+            for i in range(len(all_rv_instruments)):
+                plt.errorbar(all_phases[i],all_residuals[i],yerr=rv_err[all_rv_instruments_idxs[i]],fmt='o')
+            plt.ylabel('RV Residuals')
+            plt.xlabel('Phase')
+    if options['PLOT'].lower() != 'no' and options['PLOT'].lower() != 'false' and options['PLOT'].lower() != 'save':
+        plt.show()
+    elif options['PLOT'].lower() == 'save':
+        plt.savefig(out_dir+'fig.png',dpi=300)
+    else:
+        plt.clf()
+
+    """
     # Extract parameters:
     P = parameters['P']['object'].value
     inc = parameters['inc']['object'].value
@@ -796,3 +1615,4 @@ def plot_transit_and_rv(t,f,trv,rv,rv_err,parameters,ld_law,rv_jitter,transit_in
         for i in range(len(model_phase[idx])):
             fout.write(str(model_phase[idx][i])+' '+str(((model_rv[idx])*1e3)[i])+'\n')
         fout.close()
+    """

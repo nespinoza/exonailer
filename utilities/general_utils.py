@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 
-def read_priors(target,all_transit_instruments,all_rv_instruments,mode,filename = None):
+def read_priors(target,mode,filename = None):
     def generate_parameter(values):
         out_dict = {}
         out_dict['type'] = values[1]
@@ -11,16 +11,14 @@ def read_priors(target,all_transit_instruments,all_rv_instruments,mode,filename 
            out_dict['object'] = uniform_parameter(np.array(values[2].split(',')).astype('float64'))
         elif values[1] == 'Jeffreys':
            out_dict['object'] = jeffreys_parameter(np.array(values[2].split(',')).astype('float64'))
+        elif values[1] == 'Beta':
+           out_dict['object'] = beta_parameter(np.array(values[2].split(',')).astype('float64'))
         elif values[1] == 'FIXED':
            out_dict['object'] = constant_parameter(np.array(values[2].split(',')).astype('float64')[0])
         if len(values)>=4:
            out_dict['object'].set_value(np.float(values[3]))
+           out_dict['object'].set_init_value(np.float(values[3]))
         return out_dict
-    # Check instrument names of transit and rv measurements:
-    if mode != 'rvs':
-        transit_instruments = get_instruments(all_transit_instruments)
-    if mode != 'transit':
-        rv_instruments = get_instruments(all_rv_instruments)
 
     # Open the file containing the priors:
     if filename is None:
@@ -39,16 +37,8 @@ def read_priors(target,all_transit_instruments,all_rv_instruments,mode,filename 
             #                                [2]: hyperparameters,
             #                                [3]: starting value (optional)
             values = line.split()
-            # If more than one instrument on the RVs, and if not defined by the user, 
-            # create a different parameter for both the jitter and the center-of-mass velocity:
-            if mode != 'transit':
-                if (values[0] == 'mu' or values[0] == 'sigma_w_rv') and len(rv_instruments)>1:
-                    for instrument in rv_instruments:
-                        priors[values[0]+'_'+instrument] = generate_parameter(values)
-                else:
-                    priors[values[0]] = generate_parameter(values)
-            else:
-                priors[values[0]] = generate_parameter(values)
+            # Generate the user-defined priors:
+            priors[values[0]] = generate_parameter(values)
     f.close()
     return priors
 
@@ -69,7 +59,9 @@ def convert_time(conv_string,t):
     else:
         return t
 
-def read_data(target,mode,transit_time_def,rv_time_def):
+def read_data(options):
+    target = options['TARGET']
+    mode = options['MODE']
     t_tr,f,f_err,transit_instruments = None,None,None,None
     t_rv,rv,rv_err,rv_instruments = None,None,None,None
     if mode != 'rvs':
@@ -87,9 +79,12 @@ def read_data(target,mode,transit_time_def,rv_time_def):
             f_err = transit_data[:,2].astype('float')
             transit_instruments = np.array(len(t_tr)*['instrument'])
         else:
+            f_err = np.zeros(len(t_tr))
             transit_instruments = np.array(len(t_tr)*['instrument'])
         # Convert transit times (if input and output are the same, does nothing):
-        t_tr = convert_time(transit_time_def,t_tr)
+        for instrument in options['photometry'].keys():
+            idx = np.where(instrument == transit_instruments)[0]
+            t_tr[idx] = convert_time(options['photometry'][instrument]['TRANSIT_TIME_DEF'],t_tr[idx])
     if 'transit' not in mode:
         # Read in RV data:
         rv_data = np.genfromtxt('rv_data/'+target+'_rvs.dat',dtype='|S100')
@@ -107,17 +102,28 @@ def read_data(target,mode,transit_time_def,rv_time_def):
         else:
             rv_instruments = np.array(len(t_rv)*['instrument'])
         # Convert RV times:
-        t_rv = convert_time(rv_time_def,t_rv)
+        # Convert RV times (if input and output are the same, does nothing):
+        for instrument in options['rvs'].keys():
+            idx = np.where(instrument == rv_instruments)[0]
+            t_rv[idx] = convert_time(options['rvs'][instrument]['RV_TIME_DEF'],t_rv[idx])
+        #t_rv = convert_time(rv_time_def,t_rv)
     return t_tr,f,f_err,transit_instruments,t_rv,rv,rv_err,rv_instruments
 
 import pickle,os
-def save_results(target,mode,phot_noise_model,ld_law,parameters):
-    out_dir = 'results/'+target+'_'+mode+'_'+phot_noise_model+'_'+ld_law+'/'
+def save_results(target,options,parameters):
+    mode = options['MODE']
+    target = options['TARGET']
+    fname = target+'_'+mode+'_'
+    for instrument in options['photometry'].keys():
+        fname = fname + instrument +'_'+options['photometry'][instrument]['PHOT_NOISE_MODEL']+\
+                      '_'+options['photometry'][instrument]['LD_LAW']+'_'
+    out_dir = 'results/'+fname[:-1]+'/'
     os.mkdir(out_dir)
     # Copy used prior file to the results folder:
     os.system('cp priors_data/'+target+'_priors.dat '+out_dir+'priors.dat')
     out_posterior_file = open(out_dir+'posterior_parameters.dat','w')
     out_posterior_file.write('# This file has the final parameters obtained from the MCMC chains.\n')
+    out_posterior_file.write('# parameter value   median value  upper c-band  lower c-band\n')
 
     # Generate an output dictionary with the posteriors:
     out_dict = {}
@@ -133,16 +139,22 @@ def save_results(target,mode,phot_noise_model,ld_law,parameters):
             up_error = 0
             low_error = 0
 
-        out_posterior_file.write('{0:10}  {1:10.10f}  {2:10.10f}  {3:10.10f}\n'.format(\
+        out_posterior_file.write('{0:18}  {1:10.10f}  {2:10.10f}  {3:10.10f}\n'.format(\
                                    parameter, param, up_error, low_error))
     # Save posterior dict:
     f = open(out_dir+'posteriors.pkl','w')
     pickle.dump(out_dict,f)
     f.close()
 
-def read_results(target,mode,phot_noise_model,ld_law,all_transit_instruments,all_rv_instruments):
-    out_dir = 'results/'+target+'_'+mode+'_'+phot_noise_model+'_'+ld_law+'/'
-    parameters = read_priors(target,all_transit_instruments,all_rv_instruments,mode,filename = out_dir+'priors.dat')
+def read_results(target,options,all_transit_instruments,all_rv_instruments):
+    mode = options['MODE']
+    target = options['TARGET']
+    fname = target+'_'+mode+'_'
+    for instrument in options['photometry'].keys():
+        fname = fname + instrument +'_'+options['photometry'][instrument]['PHOT_NOISE_MODEL']+\
+                      '_'+options['photometry'][instrument]['LD_LAW']+'_'
+    out_dir = 'results/'+fname[:-1]+'/'
+    parameters = read_priors(options['TARGET'],options['MODE'])#target,all_transit_instruments,all_rv_instruments,mode,filename = out_dir+'priors.dat')
     thefile = open(out_dir+'posteriors.pkl','r')
     posteriors = pickle.load(thefile)
     for parameter in parameters.keys():
@@ -199,8 +211,10 @@ class normal_parameter:
       """   
       def __init__(self,prior_hypp):
           self.value = prior_hypp[0]
-          self_value_u = 0.0
-          self_value_l = 0.0
+          self.init_value = prior_hypp[0]
+          self.value_u = 0.0
+          self.value_l = 0.0
+          self.has_guess = False
           self.prior_hypp = prior_hypp
           self.posterior = []
 
@@ -211,12 +225,19 @@ class normal_parameter:
       def set_value(self,new_val):
           self.value = new_val
 
+      def set_init_value(self,new_val):
+          self.init_value = new_val    
+          self.has_guess = True
+
       def set_posterior(self,posterior_chain):
           self.posterior = posterior_chain
           param, param_u, param_l = get_quantiles(posterior_chain)
           self.value = param
           self.value_u = param_u
           self.value_l = param_l
+      def sample(self):
+          return np.random.normal(self.prior_hypp[0],self.prior_hypp[1])
+
 class uniform_parameter:
       """
       Description
@@ -228,8 +249,10 @@ class uniform_parameter:
       """
       def __init__(self,prior_hypp):
           self.value = (prior_hypp[0]+prior_hypp[1])/2.
-          self_value_u = 0.0
-          self_value_l = 0.0
+          self.init_value = (prior_hypp[0]+prior_hypp[1])/2.
+          self.value_u = 0.0
+          self.value_l = 0.0
+          self.has_guess = False
           self.prior_hypp = prior_hypp
           self.posterior = []
 
@@ -245,12 +268,18 @@ class uniform_parameter:
       def set_value(self,new_val):
           self.value = new_val
 
+      def set_init_value(self,new_val):
+          self.init_value = new_val
+          self.has_guess = True
+
       def set_posterior(self,posterior_chain):
           self.posterior = posterior_chain
           param, param_u, param_l = get_quantiles(posterior_chain)
           self.value = param
           self.value_u = param_u
           self.value_l = param_l
+      def sample(self):
+          return np.random.uniform(self.prior_hypp[0],self.prior_hypp[1])
 
 log1 = np.log(1)
 class jeffreys_parameter:
@@ -264,8 +293,10 @@ class jeffreys_parameter:
       """
       def __init__(self,prior_hypp):
           self.value = np.sqrt(prior_hypp[0]*prior_hypp[1])
-          self_value_u = 0.0
-          self_value_l = 0.0
+          self.init_value = np.sqrt(prior_hypp[0]*prior_hypp[1])
+          self.value_u = 0.0
+          self.value_l = 0.0
+          self.has_guess = False
           self.prior_hypp = prior_hypp
           self.posterior = []
 
@@ -281,12 +312,67 @@ class jeffreys_parameter:
       def set_value(self,new_val):
           self.value = new_val
 
+      def set_init_value(self,new_val):
+          self.init_value = new_val
+          self.has_guess = True
+
       def set_posterior(self,posterior_chain):
           self.posterior = posterior_chain
           param, param_u, param_l = get_quantiles(posterior_chain)
           self.value = param
           self.value_u = param_u
           self.value_l = param_l
+      def sample(self):
+          return np.exp(np.random.uniform(np.log(self.prior_hypp[0]),np.log(self.prior_hypp[1])))
+
+from scipy.special import gamma
+class beta_parameter:
+      """
+      Description
+      -----------
+
+      This class defines a parameter object which has a Beta prior. It serves 
+      to save both the prior and the posterior chains for an easier check of the parameter.
+
+      """
+      def __init__(self,prior_hypp):
+          self.value = 0.5
+          self.init_value = 0.5
+          self.value_u = 0.0
+          self.value_l = 0.0
+          self.has_guess = False
+          self.prior_hypp = prior_hypp
+          self.gamma_alpha = gamma(prior_hypp[0])
+          self.gamma_beta = gamma(prior_hypp[1])
+          self.gamma_sum = gamma(prior_hypp[0]+prior_hypp[1])
+          self.posterior = []
+
+      def get_ln_prior(self):
+          return np.log(self.gamma_sum) + (self.prior_hypp[0]-1.)*np.log(self.value) + \
+                 (self.prior_hypp[1]-1.)*np.log(1.-self.value) - np.log(self.gamma_alpha) - \
+                 np.log(self.gamma_beta)
+
+      def check_value(self,x):
+          if x > 0. and  x < 1.:
+              return True
+          else:
+              return False
+
+      def set_value(self,new_val):
+          self.value = new_val
+
+      def set_init_value(self,new_val):
+          self.init_value = new_val
+          self.has_guess = True
+
+      def set_posterior(self,posterior_chain):
+          self.posterior = posterior_chain
+          param, param_u, param_l = get_quantiles(posterior_chain)
+          self.value = param
+          self.value_u = param_u
+          self.value_l = param_l
+      def sample(self):
+          return np.random.beta(self.prior_hypp[0],self.prior_hypp[1])
 
 class constant_parameter:
       """
@@ -300,3 +386,78 @@ class constant_parameter:
       def __init__(self,val):
           self.value = val
 
+def read_input_parameters():
+    fin = open('options_file.dat','r')
+    opt_dict = {}
+    general_opts =False
+    phot_opts = False
+    RV_opts = False
+    c_instrument = None
+    while True:
+        line = fin.readline()
+        if line == '':
+            break
+        if len(line.split()) != 0:
+            if 'GENERAL OPTIONS' in line:
+                line = fin.readline()
+                general_opts = True
+                phot_opts = False
+                RV_opts = False
+            if 'PHOTOMETRY OPTIONS' in line:
+                opt_dict['photometry'] = {}
+                phot_opts = True
+                RV_opts = False
+                general_opts = False
+                line = fin.readline()
+            if 'RADIAL-VELOCITY OPTIONS' in line:
+                opt_dict['rvs'] = {}
+                RV_opts = True
+                phot_opts = False
+                general_opts = False
+                line = fin.readline()
+            if general_opts:
+                if '---' not in line:
+                    var,opt = line.split(':')
+                    opt_dict[var.split()[0]] = (opt.split()[0]).split('\n')[0]
+                    if var.split()[0] in ['NWALKERS','NJUMPS','NBURNIN']:
+                        opt_dict[var.split()[0]] = int(opt_dict[var.split()[0]])
+            if phot_opts:
+                if 'INSTRUMENT:' in line:
+                    c_instrument = line.split('INSTRUMENT:')[-1].split()[0]
+                    opt_dict['photometry'][c_instrument] = {}
+                elif '---' not in line:
+                    var,opt = line.split(':')
+                    opt_dict['photometry'][c_instrument][var.split()[0]] = opt.split()[0]
+                    if var.split()[0] in ['WINDOW','NRESAMPLING','NASTEROSEISMOLOGY']:
+                        opt_dict['photometry'][c_instrument][var.split()[0]] = int(opt.split()[0])
+                    elif var.split()[0] in ['PHASE_MAX_RESAMPLING']:
+                        opt_dict['photometry'][c_instrument][var.split()[0]] = np.double(opt.split()[0])
+                    elif var.split()[0] in ['NOMIT']:
+                            nomits = opt.split()[0].split(',')
+                            opt_dict['photometry'][c_instrument][var.split()[0]] = np.array(nomits).astype(int)
+                    if opt.split()[0].lower() == 'yes' or opt.split()[0].lower() == 'true':
+                        opt_dict['photometry'][c_instrument][var.split()[0]] = True
+                    elif opt.split()[0].lower() == 'no' or opt.split()[0].lower() == 'false':
+                        opt_dict['photometry'][c_instrument][var.split()[0]] = False
+                    if opt.split()[0].lower() == 'None':
+                        opt_dict['photometry'][c_instrument][var.split()[0]] = None
+
+            if RV_opts:
+                if 'INSTRUMENT:' in line:
+                    c_instrument = line.split('INSTRUMENT:')[-1].split()[0]
+                    opt_dict['rvs'][c_instrument] = {}
+                elif '---' not in line:
+                    var,opt = line.split(':')
+                    opt_dict['rvs'][c_instrument][var.split()[0]] = opt.split()[0]
+                    if opt.split()[0].lower() == 'yes' or opt.split()[0].lower() == 'true':
+                        opt_dict['rvs'][c_instrument][var.split()[0]] = True
+                    elif opt.split()[0].lower() == 'no' or opt.split()[0].lower() == 'flase':
+                        opt_dict['rvs'][c_instrument][var.split()[0]] = False
+                    if opt.split()[0].lower() == 'None':
+                        opt_dict['rvs'][c_instrument][var.split()[0]] = None
+                
+    fin.close()
+    for instrument in opt_dict['photometry'].keys():
+        if 'NOMIT' not in opt_dict['photometry'][instrument].keys():
+            opt_dict['photometry'][instrument]['NOMIT'] = np.array([])
+    return opt_dict            
