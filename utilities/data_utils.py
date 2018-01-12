@@ -3,10 +3,17 @@ from math import floor,ceil
 import matplotlib.pyplot as plt
 plt.style.use('ggplot')
 import matplotlib.gridspec as gridspec
-from george import kernels
-import george
-import celerite
-from celerite import terms
+try:
+    import george
+    from george import kernels
+except:
+    print 'Warning! The george package is not installed. Some GP functionalities will not work.'
+
+try:
+    import celerite
+    from celerite import terms
+except:
+    print 'Warning! The celerite package is not installed. Some GP functionalities will not work.'
 import numpy as np
 import batman
 import radvel
