@@ -9,6 +9,7 @@ import celerite
 from celerite import terms
 import numpy as np
 import batman
+import radvel
 
 # This defines prior distributions that need samples to be
 # controlled so they don't get out of their support:
@@ -169,6 +170,9 @@ def init_batman(t,law):
     m = batman.TransitModel(params,t)
     return params,m
 
+def init_radvel(nplanets=1):
+    return radvel.model.Parameters(nplanets,basis='per tc e w k')
+
 def get_transit_model(t,t0,P,p,a,inc,q1,q2,ld_law):
     params,m = init_batman(t,law=ld_law)
     coeff1,coeff2 = reverse_ld_coeffs(ld_law, q1, q2)
@@ -219,7 +223,6 @@ def count_instruments(instrument_list):
 import emcee
 import Wavelets
 import scipy.optimize as op
-import ajplanet as rv_model
 def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv, rv_err, rv_instruments,\
                        parameters, idx_resampling, options,texp = 0.01881944):
                        #ld_law, mode, rv_jitter = False, \
@@ -332,7 +335,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
        #else:
        #   rv_params.append('mu')
        #   rv_params.append('sigma_w_rv')
-
+       radvel_params = init_radvel()
     # Create lists that will save parameters to check the limits on:
     parameters_to_check = []
 
@@ -751,9 +754,13 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
         #print 'K',parameters['K']['object'].value
         #print 'ecc',parameters['ecc']['object'].value
         if len(all_rv_instruments) == 1:
-            model = rv_model.pl_rv_array(xrv,parameters['mu']['object'].value,parameters['K']['object'].value,\
-                            parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
-                            parameters['t0']['object'].value,parameters['P']['object'].value)
+            radvel_params['per1'] = parameters['P']['object'].value
+            radvel_params['tc1'] = parameters['t0']['object'].value
+            radvel_params['w1'] = parameters['omega']['object'].value*np.pi/180.
+            radvel_params['e1'] = parameters['ecc']['object'].value
+            radvel_params['k1'] = parameters['K']['object'].value
+            model = parameters['mu']['object'].value + radvel.model.RVModel(radvel_params).__call__(xrv)
+
             residuals = (yrv-model)
             #print 'Median residuals:',np.median(residuals)
             taus = 1.0/((yerrrv)**2 + (parameters['sigma_w_rv']['object'].value)**2)
@@ -763,9 +770,13 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
         else:
             log_like = 0.0
             for i in range(len(all_rv_instruments)):
-                model = rv_model.pl_rv_array(xrv[all_rv_instruments_idxs[i]],parameters['mu'+sufix[all_rv_instruments[i]]['mu']]['object'].value,\
-                                parameters['K']['object'].value, parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
-                                parameters['t0']['object'].value,parameters['P']['object'].value)
+                radvel_params['per1'] = parameters['P']['object'].value
+                radvel_params['tc1'] = parameters['t0']['object'].value
+                radvel_params['w1'] = parameters['omega']['object'].value*np.pi/180.
+                radvel_params['e1'] = parameters['ecc']['object'].value
+                radvel_params['k1'] = parameters['K']['object'].value
+                model = parameters['mu'+sufix[all_rv_instruments[i]]['mu']]['object'].value + \
+                        radvel.model.RVModel(radvel_params).__call__(xrv[all_rv_instruments_idxs[i]])
                 residuals = (yrv[all_rv_instruments_idxs[i]]-model)
                 taus = 1.0/((yerrrv[all_rv_instruments_idxs[i]])**2 + (parameters['sigma_w_rv'+sufix[all_rv_instruments[i]]['sigma_w_rv']]['object'].value)**2)
                 log_like = log_like -0.5*(n_data_rvs[i]*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
@@ -1384,17 +1395,21 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
 
     # Plot RVs:
     if options['MODE'] != 'transit':
+        radvel_params = init_radvel()
         if options['MODE'] == 'full':
             plt.subplot2grid((nrows,ncols),(1,0),colspan=ncols)
         if len(all_rv_instruments) == 1:
-            model = rv_model.pl_rv_array(xrv,parameters['mu']['object'].value,parameters['K']['object'].value,\
-                            parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
-                            parameters['t0']['object'].value,parameters['P']['object'].value)
+            radvel_params['per1'] = parameters['P']['object'].value
+            radvel_params['tc1'] = parameters['t0']['object'].value
+            radvel_params['w1'] = parameters['omega']['object'].value*np.pi/180.
+            radvel_params['e1'] = parameters['ecc']['object'].value
+            radvel_params['k1'] = parameters['K']['object'].value
+            model = parameters['mu']['object'].value + radvel.model.RVModel(radvel_params).__call__(xrv)
+
             residuals = (yrv-model)
             model_t = parameters['t0']['object'].value + np.linspace(-0.5,0.5,500)*parameters['P']['object'].value
-            model_pred = rv_model.pl_rv_array(model_t,parameters['mu']['object'].value,parameters['K']['object'].value,\
-                            parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
-                            parameters['t0']['object'].value,parameters['P']['object'].value)
+            model_pred = parameters['mu']['object'].value + radvel.model.RVModel(radvel_params).__call__(model_t)
+
             phase = get_phases(xrv,parameters['P']['object'].value,parameters['t0']['object'].value)
             plt.errorbar(phase,(yrv-parameters['mu']['object'].value),yerr=rv_err,fmt='o',label=all_rv_instruments[0])
             model_phase = get_phases(model_t,parameters['P']['object'].value,parameters['t0']['object'].value)
@@ -1422,14 +1437,17 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
             log_like = 0.0
             all_residuals = []
             all_phases = []
+            radvel_params['per1'] = parameters['P']['object'].value
+            radvel_params['tc1'] = parameters['t0']['object'].value
+            radvel_params['w1'] = parameters['omega']['object'].value*np.pi/180.
+            radvel_params['e1'] = parameters['ecc']['object'].value
+            radvel_params['k1'] = parameters['K']['object'].value
             model_t = parameters['t0']['object'].value + np.linspace(-0.5,0.5,500)*parameters['P']['object'].value
-            model_pred = rv_model.pl_rv_array(model_t,0.0,\
-                                parameters['K']['object'].value, parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
-                                parameters['t0']['object'].value,parameters['P']['object'].value)
+
+            model_pred = radvel.model.RVModel(radvel_params).__call__(model_t)
             for i in range(len(all_rv_instruments)):
-                model = rv_model.pl_rv_array(xrv[all_rv_instruments_idxs[i]],parameters['mu_'+all_rv_instruments[i]]['object'].value,\
-                                parameters['K']['object'].value, parameters['omega']['object'].value*np.pi/180.,parameters['ecc']['object'].value,\
-                                parameters['t0']['object'].value,parameters['P']['object'].value)
+                model = parameters['mu_'+all_rv_instruments[i]]['object'].value + \
+                        radvel.model.RVModel(radvel_params).__call__(xrv[all_rv_instruments_idxs[i]])
                 residuals = (yrv[all_rv_instruments_idxs[i]]-model)
                 all_residuals.append(residuals)
                 phase = get_phases(xrv[all_rv_instruments_idxs[i]],parameters['P']['object'].value,parameters['t0']['object'].value)
