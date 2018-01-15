@@ -11,21 +11,21 @@ Author: Néstor Espinoza (nespino@astro.puc.cl)
 DEPENDENCIES
 ------------
 
-This code makes use of six important libraries:
+This code makes use of seven important libraries:
 
 - **Numpy**.
 - **Scipy**.
 - **The Bad-Ass Transit Model cAlculatioN (batman) for transit modelling** (http://astro.uchicago.edu/~kreidberg/batman/).
+- **The RadVel package** (radvel.readthedocs.io/en/latest/).
 - **emcee for MCMC sampling** (http://dan.iel.fm/emcee/current/).
 - **Astropy for time conversions** (http://www.astropy.org).
 - **The GNU Scientific Library** (https://www.gnu.org/software/gsl/)
 
 All of them are open source and can be easily installed in any machine. Be 
 sure to install them before running the installer (see below), otherwise, it 
-will complain. This code also makes use of the `ajplanet` module for 
-radial-velocity modelling (https://github.com/andres-jordan/ajplanet) and the 
-`flicker-noise` module (https://github.com/nespinoza/flicker-noise), for modelling 
-1/f noise. Copies of the source codes of those modules are included in this repository 
+will complain. This code also makes use of the `flicker-noise` module 
+(https://github.com/nespinoza/flicker-noise), for modelling 1/f noise. A copy of the 
+source code of this module is included in this repository 
 and will be installed automatically.
 
 INSTALLATION
@@ -200,16 +200,14 @@ WHISH-LIST
 
     + Add example datasets with RV + transit.
 
+    + Explain how to add photometry from different instruments.
+
     + Create a tutorial.
 
 
 TODO
 ----
 
-    + Add option to add photometry from different instruments.
-
-    + GPs for detrending and for noise models.
-
     + Transit and RVs for multi-planet systems.
 
-    + Noise models for RVs.
+    + Noise models (e.g. GPs) for RVs.
