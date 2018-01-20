@@ -73,6 +73,15 @@ def CheckLibraries():
       sys.exit(1)
     print "     > radvel is ok!" 
 
+    try:
+      import radvel
+    except ImportError:
+      print "     ----------------------------------------------------------"
+      print '     ERROR: '+p_name+' will not be installed in your system because'
+      print '            radvel is not installed in your system.'
+      print '            To install it, go to: http://radvel.readthedocs.io/en/latest/ \n\n'
+      sys.exit(1)
+    print "     > radvel is ok!" 
 
 def Build(directory):
     # We obtain al files and folders of the current directory...
