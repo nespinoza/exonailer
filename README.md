@@ -143,7 +143,7 @@ The **PHOTOMETRY OPTIONS** have to be defined for each instrument. For each one,
                           JD format, i.e., JD, BJD, MDJ, etc.) of the transit times. If input transit times 
                           are, for example, in utc and you want results in tdb, this has to be 'utc->tdb'.
 
-The **RADIAL-VELCOCITY OPTIONS** have to be defined for each instrument as well. For each one, you must define:
+The **RADIAL-VELOCITY OPTIONS** have to be defined for each instrument as well. For each one, you must define:
 
     INSTRUMENT:           The name of the instrument. These have to match the instruments in the radial-velocity 
                           data.
