@@ -192,6 +192,14 @@ The mandatory variables that must have some of the above defined priors in the c
     p:              Planet-to-star radius ratio. If you want to define a different one for each 
                     instrument, add a lower-dash and put the name of the instrument (e.g., `p_Telescope`).
 
+    q1:             Limb-darkening parameter. This corresponds to the transformation of the uninformative 
+                    limb-darkening threatment scheme defined in Kipping et al. (2013, MNRAS, 435, 2152). 
+                    The exact transformation is defined by the limb-darkening law used. If you want to define 
+                    a different one for each instrument, add a lower-dash and put the name of the instrument 
+                    (e.g., `q1_Telescope`).
+
+    q2:             Second limb-darkening parameter. Same as for `q1`. 
+
     inc:            Inclination of the orbit in degrees.
 
     sigma_w:        Standard-deviation of the underlying white noise process giving rise to 
