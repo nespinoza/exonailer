@@ -6,9 +6,9 @@ or both.
 
 ![Exonailer fit to data](exonailer.png?raw=true "Example of exonailer fit to data") 
 
-Author: Néstor Espinoza (nespino@astro.puc.cl)
+Author: Néstor Espinoza (espinoza@mpia.de)
 
-*If you make use of this code, please cite Espinoza et al., 2016, ApJ, in press. (http://arxiv.org/abs/1601.07608)*
+*If you make use of this code, please cite Espinoza et al., 2016, ApJ, 830, 43 (http://arxiv.org/abs/1601.07608)*
 
 DEPENDENCIES
 ------------
