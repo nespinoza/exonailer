@@ -18,7 +18,7 @@ This code makes use of seven important libraries:
 - **Numpy**.
 - **Scipy**.
 - **The Bad-Ass Transit Model cAlculatioN (batman) for transit modelling** (http://astro.uchicago.edu/~kreidberg/batman/).
-- **The RadVel package** (radvel.readthedocs.io/en/latest/).
+- **The RadVel package** (http://radvel.readthedocs.io/en/latest/).
 - **emcee for MCMC sampling** (http://dan.iel.fm/emcee/current/).
 - **Astropy for time conversions** (http://www.astropy.org).
 - **The GNU Scientific Library** (https://www.gnu.org/software/gsl/)
