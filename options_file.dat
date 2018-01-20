@@ -1,0 +1,42 @@
+GENERAL OPTIONS
+---------------
+  TARGET: my_target
+  MODE: full
+  NWALKERS: 250
+  NJUMPS: 250
+  NBURNIN: 250
+  PLOT: YES
+
+PHOTOMETRY OPTIONS
+------------------
+  INSTRUMENT:            Telescope
+  PHOT_NOISE_MODEL:      white
+  PHOT_DETREND:          NO
+  WINDOW:                51
+  PHOT_GET_OUTLIERS:     NO
+  RESAMPLING:            NO
+  PHASE_MAX_RESAMPLING:  0.02
+  NRESAMPLING:           20
+  LD_LAW:                quadratic
+  TRANSIT_TIME_DEF:      utc->utc
+
+
+
+  INSTRUMENT:            AmazingTelescope
+  PHOT_NOISE_MODEL:      white
+  PHOT_DETREND:          NO
+  WINDOW:                51  
+  PHOT_GET_OUTLIERS:     NO  
+  RESAMPLING:            NO  
+  PHASE_MAX_RESAMPLING:  0.02
+  NRESAMPLING:           20  
+  LD_LAW:                quadratic
+  TRANSIT_TIME_DEF:      utc->utc
+
+RADIAL-VELOCITY OPTIONS
+-----------------------
+  INSTRUMENT:            Spectrograph
+  RV_TIME_DEF:           utc->utc
+
+  INSTRUMENT:            UltimateSpectrograph
+  RV_TIME_DEF:           utc->utc

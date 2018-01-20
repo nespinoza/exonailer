@@ -1,8 +1,10 @@
 # exonailer
 
 The **EXO**planet tra**N**sits and r**A**d**I**al ve**L**ocity fitt**ER** (**EXO**-**NAILER**), is 
-an easy-to-use code that allows you to efficiently fit exoplanet transit lightcurves, radial velocities 
-or both. 
+an easy-to-use code that allows you to efficiently fit exoplanet transit lightcurves, radial velocities (RVs) 
+or both.
+
+![Exonailer fit to data](exonailer.png?raw=true "Example of exonailer fit to data") 
 
 Author: Néstor Espinoza (nespino@astro.puc.cl)
 
@@ -39,69 +41,108 @@ After this is done, the code will be ready to use!
 USAGE
 -----
 
-To use the code is very simple. Suppose we have a target that we named 
-`my_data`:
+To use the code is very simple, and to help you understand how to use it, we have 
+added a synthetic dataset for the target `my_target`, along with this package. `my_target`, 
+of course, is a generic target name. You can put any target name you want as long as it 
+includes no spaces. With this decided:
 
-    1. Put the photometry under `transit_data/my_data_lc.dat`. Similarly, 
-       put the RVs (if you have any) under `rv_data/my_data_rvs.dat`. These 
-       are expected to have four columns: times, data, error and name of the 
-       instrument (which is a string); however, only the two first are mandatory: 
+    1. Put your photometry under the `transit_data` folder. The file containing the photometry 
+       has to be named `target_lc.dat`, where `target` is the name of your target. In our case, 
+       `my_target`. Similarly, put the RVs (if you have any) under the `rv_data` folder. The file 
+       containing the RVs has to be named `target_rvs.dat`, where `target`, again, is the name of 
+       your target. In our case, `my_target`. These are expected to have four columns: times, data, 
+       error and name of the instrument (which is a string); however, only the two first are mandatory: 
        the code will recognize that you don't have errors on your variables and if no 
        instrument names are given, it will assume all come from the same instrument. 
        The flux is expected to be normalized to 1. The RVs are expected to be in km/s.
 
-    2. Create a prior file under `priors_data/my_data_priors.dat`. The code 
-       expects this file to have three columns: the parameter name, the prior 
+    2. Create a prior file under the `priors_data` folder. The file containing the photometry 
+       has to be named `target_priors.dat`, where `target` is (you guessed!) the name of your target. 
+       The code expects this file to have three columns: the parameter name, the prior 
        type and the hyperparameters of the prior separated by commas (see below). 
        If you want a parameter to be fixed, put `FIXED` on the Prior Type column 
-       and define the value you want to keep it fixed in the hyperparameters column.
+       and define the value you want to keep it fixed in the hyperparameters column. 
+       Also, if a prior other than `FIXED` is defined, a fourth column can be entered for 
+       each parameter where you can specify the starting point of the parameter (say, one 
+       obtained by a previous least-square fit, or a value you know to be close to the 
+       true parameter, etc.).
 
 As can be seen from the above, the code can handle data taken with different instruments. 
-Currently this only modifies the outputs of the RVs where, if more than one instrument is 
-detected, a different center-of-mass velocity is fitted for each instrument in order to 
-account for offsets between them, and if jitter is included, a different jitter term is 
-also fitted for each instrument.
+For RVs, this means that a different center-of-mass velocity can be fitted for each instrument 
+in order to account for offsets between them, and if jitter is included, a different jitter term 
+can also fitted for each instrument. For transits, this means a different photometric jitter can be 
+fitted to each instrument, as well as different limb-darkening coefficients and different transit depths. 
 
-Next, you can modify the options in the exonailer.py code. The options are:
+As previously stated, there is a synthetic dataset along with this code which is useful to understand 
+how to get your fit started. The lightcurves for this dataset are under the `transit_data` folder and is 
+labeled `my_target_lc.dat`, while the RVs are under the `rv_data` folder and is named `my_target_rvs.dat`.
 
-    target:             The name of your target (in this case, `my_data`).
 
-    phot_noise_model:   This parameter defines the noise model used for the photometry. If set 
-                        to 'white', it assumes the underlying noise is white-noise. If set to 
-                        'flicker', it assumes it is a white + 1/f.
+Next, you can modify the options of your fit in the `options_file.dat` file.
 
-    phot_detrend:       This performs a small detrend on the photometry. If set to 'mfilter' 
-                        it will median filter and then smooth this filter with a gaussian filter. 
-                        It works pretty well for Kepler data. If you don't want to do any kind 
-                        of detrending, set this to None.
+The **GENERAL OPTIONS** are:
 
-    window:             This defines the window of the 'mfilter'. Usually way longer than your 
-                        transit event.
+    TARGET:             The name of your target.
 
-    phot_get_outliers:  This automatically sigma-clips any outliers in your data. It relies on 
-                        having decent priors on the ephemeris (t0 and P).
+    MODE:               This defines which kind of fit you want to perform. `full` means a full 
+                        transit and radial-velocity fit. `transit` means you only will fit the 
+                        transit lightcurves and `rvs` means you will only fit the radial-velocities.
 
-    n_omit:             Is an array that lets you ommit transit in the fitting procedure (e.g., 
-                        transits with spots). Just put the number of the transits (counted from 
-                        the first event in time, with this event counted as 0) that you want 
-                        to ommit in the list and the code will do the rest.
+    NWALKERS:           This is the number of walkers on the MCMC runs (for more information on this 
+                        parameter, check out the `emcee` documentation).
 
-    ld_law:             Limb-darkening law to use. For all the laws but the logarithmic the 
-                        sampling is done using the transformations defined in Kipping (2013). 
-                        The logarithmic law is sampled according to Espinoza & Jordán (2015b).
+    NJUMPS:             This is the number of jumps on the MCMC (for more information on this 
+                        parameter, check out the `emcee` documentation).
 
-    mode:               Can be set to three different modes. 'full' performs a full transit + rv 
-                        fit, 'transit' performs only a transit fit to the photometry, while 'rvs' 
-                        performs a fit to the RVs only.
+    NBURNIN:            This is the number of burn-in runs of the MCMC (for more information on this
+                        parameter, check out the `emcee` documentation). 
 
-    rv_jitter:          If set to True, an extra 'jitter' term is added to the RVs error to account 
-                        for stellar jitter.
+    PLOT:               If set to `NO`, no plots will me shown at the end. If set to `YES`, a plot at the 
+                        end of the `exonailer` run will be shown similar to the one shown above.
 
-    transit_time_def:   Defines the input and output time scales (the times are assumed to be in the 
-                        JD format, i.e., JD, BJD, MDJ, etc.) of the transit times. If input transit times 
-                        are, for example, in utc and you want results in tdb, this has to be 'utc->tdb'.
+The **PHOTOMETRY OPTIONS** have to be defined for each instrument. For each one, you must define:
 
-    rv_time_def:        Same as for transit times but for the times in the RVs.
+    INSTRUMENT:           The name of the instrument. These have to match the instruments in the transit 
+                          lightcurves.
+
+    PHOT_NOISE_MODEL:     This parameter defines the noise model used for the photometry. If set 
+                          to 'white', it assumes the underlying noise is white-noise. If set to 
+                          'flicker', it assumes it is a white + 1/f.
+
+    PHOT_DETREND:         This performs a small detrend on the photometry. If set to 'mfilter' 
+                          it will median filter and then smooth this filter with a gaussian filter. 
+                          It works pretty well for Kepler data. If you don't want to do any kind 
+                          of detrending, set this to `NO`.
+
+    WINDOW:               This defines the window of the 'mfilter'. Usually way longer than your 
+                          transit event, and is defined in number of datapoints.
+
+    PHOT_GET_OUTLIERS:    This automatically sigma-clips any outliers in your data if set to `YES`. 
+                          It relies on having decent priors on the ephemeris (t0 and P). If you don't want 
+                          to remove them, set this to `NO`.
+
+    NOMIT:                It is a sequence of numbers, separated by commas, that lets you ommit transit in 
+                          the fitting procedure (e.g., transits with spots). Just put the number of the transits 
+                          (counted from the first event in time, with this event counted as 0) that you want 
+                          to ommit. If you don't want to ommit any transit, don't put this option.
+
+    RESAMPLING:           Set this to `YES` if you want to use the selective resampling scheme of Kipping (2010, MNRAS, 
+                          408, 1758), applied to 30-minute cadence Kepler lightcurves. 
+
+    PHASE_MAX_RESAMPLING: This define the maximum phase at which the data will be resampled if `RESAMPLING` is set to 
+                          `YES`.
+
+    NRESAMPLING:          This defines the number of instantaneous lightcurve points used to resample the lightcurve 
+                          if `RESAMPLING` is set to `YES`.
+
+    LD_LAW:               Limb-darkening law to use. For all the laws but the logarithmic the 
+                          sampling is done using the transformations defined in Kipping (2013). 
+                          The logarithmic law is sampled according to Espinoza & Jordán (2015b).
+
+    TRANSIT_TIME_DEF:     Defines the input and output time scales (the times are assumed to be in the 
+                          JD format, i.e., JD, BJD, MDJ, etc.) of the transit times. If input transit times 
+                          are, for example, in utc and you want results in tdb, this has to be 'utc->tdb'.
+
 
 Once you are done with this, just run the code by doing:
 
@@ -120,7 +161,7 @@ The priors currently supported by the code are:
 
     Uniform:        Expects that the third column in the prior file has the form
 
-                                         a,b, 
+                                         a,b 
 
                     where a is the minimum value and b is the maximum value.
 
@@ -131,49 +172,51 @@ The priors currently supported by the code are:
                     where low is the lower limit of the variable and up is the upper 
                     limit of the variable.
 
+    Beta:           Expects that the third column in the prior file has the form
+
+                                        alpha,beta
+
+                    where alpha and beta are the parameters that define the beta distribution. 
+
     FIXED:          This assumes you are giving the fixed value of the variable in 
                     the third column.
 
-The mandatory variables that must have some of the above defined priors are:
+The mandatory variables that must have some of the above defined priors in the case of a `transit` fit are::
 
-    Period:         The period of the orbit of the exoplanet. Same units as the time.
+    P:              The period of the orbit of the exoplanet. Same units as the time.
     
     t0:             The time of transit center. Same units as the time.
 
     a:              Semi-major axis in stellar units.
 
-    p:              Planet-to-star radius ratio.
+    p:              Planet-to-star radius ratio. If you want to define a different one for each 
+                    instrument, add a lower-dash and put the name of the instrument (e.g., `p_Telescope`).
 
     inc:            Inclination of the orbit in degrees.
 
     sigma_w:        Standard-deviation of the underlying white noise process giving rise to 
-                    the observed noise (in ppm).
+                    the observed noise (in ppm). If you want to define a different one for each 
+                    instrument, add a lower-dash and put the name of the instrument (e.g., `sigma_w_Telescope`).
 
     ecc:            Eccentricity of the orbit.
 
     omega:          Argument of periapsis (in degrees)
 
-Of course, e.g., for a circular fit, you might want to fix `ecc` (to 0) and `omega` (e.g., to 90). 
-The optional variables are:
+Of course, e.g., for a circular fit, you might want to fix `ecc` (to 0) and `omega` (e.g., to 90). If you 
+define the `PHOT_NOISE_MODEL` as `flicker`, you must add an extra parameter, `sigma_r` (see Carter & Winn, 2009).
+The variables which have to be defined in case of a `rvs` fit, in addition to the eccentricity, period, 
+time of transit-center and omega, are:
 
-    mu:             Center-of-mass velocity of the RVs.
+    mu:             Center-of-mass velocity of the RVs. If you want to define a different one for each 
+                    instrument, add a lower-dash and put the name of the instrument (e.g., `mu_Spectrograph`).
 
     K:              Radial-velocity semi-amplitude.
     
-    sigma_w_rv:     Jitter term for radial-velocities (see below).
+    sigma_w_rv:     Jitter term for radial-velocities (see below). If you want to define a different one for each
+                    instrument, add a lower-dash and put the name of the instrument (e.g., `sigma_w_rv_Spectrograph`). 
+                    If you do not want to include jitter, set this to `FIXED` in the prior file, and set it to zero.
 
-    sigma_r:        Parameter for 1/f noise (see below).
-
-If in the options of the exonailer.py code you set `phot_noise_model` to `'flicker'`, then you 
-must also define a `sigma_r` parameter (see Carter & Winn, 2009). If you set `rv_jitter` to 
-`True`, you must also set a `sigma_w_rv` parameter for the jitter term. 
-
-In the case in which you have two or more instruments for the RVs, you can also define 
-different priors for each value of `mu` and `sigma_w_rv` by adding a subscript and the name 
-of the instrument. For example, if you have data from coralie and feros, instead of 
-using a common prior for `mu` and `sigma_w_rv` for both of them, you can specify one for 
-each by assigning priors to the variables `mu_coralie` and `sigma_w_rv_coralie` and `mu_feros`
-and `sigma_w_rv_feros`.
+In the case of `full` exonailer fits, all of these parameters have to be defined.
 
 OUTPUTS
 -------
@@ -194,15 +237,15 @@ each of your fits and, inside, three files:
                                           in case you are trying different priors to see how your results 
                                           change).
 
+In addition, the data, model and residuals of the transit, radial-velocities or both will be exported as .dat files 
+to this folder, so you can easily plot them yourself.
 
 WHISH-LIST
 ----------
 
-    + Add example datasets with RV + transit.
-
-    + Explain how to add photometry from different instruments.
-
-    + Create a tutorial.
+    + Create a tutorial explaining usage of GPs for transits (implemented, but not yet documented)
+ 
+    + Add MULTI-NEST support.
 
 
 TODO
