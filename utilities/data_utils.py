@@ -72,6 +72,9 @@ def pre_process(all_t,all_f,all_f_err,options,transit_instruments,parameters):
                 f = f/filt
                 if f_err is not None:
                     f_err = f_err/filt
+            elif type(options['photometry'][instrument]['PHOT_DETREND']) is not bool:
+                print '\t WARNING: PHOT_DETREND option '+options['photometry'][instrument]['PHOT_DETREND']+\
+                      ' for '+instrument+' not recognized!'
 
         # Extract transit parameters from prior dictionary:
         if options['MODE'] != 'transit_noise':
