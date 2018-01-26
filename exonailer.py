@@ -10,46 +10,6 @@ import numpy as np
 
 options = general_utils.read_input_parameters()
 
-"""
-# Define the target name, detrending method and parameters of it:
-target = '228735255b'#'CL032-10'#'my_data'
-
-photometry = {}
-phot_noise_model = ['white','white']
-phot_detrend = [None,None]#'mfilter'
-window = [41,41]
-
-# Define if you want to perform automatic outlier removal (sigma-clipping):
-phot_get_outliers = [True,False]
-
-# Define which transits you want to ommit (counted from first transit):
-n_ommit = [[],[]]
-
-# Define if you want to perform the resampling technique and in 
-# which phase range you want to perform such resampling. Additionally, 
-# define how many samples you want to resample:
-resampling = [True,False]
-phase_max = [0.025,0.025]
-N_resampling = [20,20]
-
-# Limb-darkening law to be used:
-ld_law = ['quadratic','quadratic']
-
-# Define the mode to be used:
-mode = 'full' 
-
-# Define noise properties:
-rv_jitter = False
-
-# Define emcee parameters:
-nwalkers = 500
-njumps = 500
-nburnin = 500
-
-# Define time conversions:
-transit_time_def = ['tdb->utc','utc->utc']
-rv_time_def = 'utc->utc'
-"""
 ################################################
 
 # ---------- DATA PRE-PROCESSING ------------- #
