@@ -285,7 +285,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
     """
 
     # If mode is not RV:
-    if options['MODE'] != 'rv':
+    if options['MODE'] != 'rvs':
         params = {}
         m = {}
         t_resampling = {}
@@ -320,12 +320,15 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
                transit_flat[instrument][idx_resampling[instrument]] = np.zeros(len(idx_resampling[instrument]))
 
     # Initialize the variable names:
-    if len(all_tr_instruments)>1:
-        transit_params = ['P','inc']
+    if options['MODE'] != 'rvs':
+        if len(all_tr_instruments)>1:
+            transit_params = ['P','inc']
+        else:
+            the_instrument = options['photometry'].keys()[0]
+            transit_params = ['P','inc','t0','a','p','sigma_w','sigma_r','q1','q2']
+        common_params = ['ecc','omega']
     else:
-        the_instrument = options['photometry'].keys()[0]
-        transit_params = ['P','inc','t0','a','p','sigma_w','sigma_r','q1','q2']
-    common_params = ['ecc','omega']
+        common_params = ['ecc','omega','P','t0']
 
     # If mode is not transit, prepare the RV data too:
     if 'transit' not in options['MODE']:
@@ -367,7 +370,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
     # each instrument in the MCMC, in order to keep track of the parameters that
     # are being held constant between instruments and those that vary with instrument:
     sufix = {}
-    if options['MODE'] != 'rv' and options['MODE'] != 'transit_noise':
+    if options['MODE'] != 'rvs' and options['MODE'] != 'transit_noise':
         if len(all_tr_instruments)>1:
             # Check parameters that always will be constant amongst transits:
             for par in ['P','inc']:
@@ -500,7 +503,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
                     rv_params.append(rvpar)
     if options['MODE'] == 'transit':
             all_mcmc_params = transit_params + common_params
-    elif options['MODE'] == 'rv':
+    elif options['MODE'] == 'rvs':
             all_mcmc_params = rv_params + common_params
     elif options['MODE'] == 'transit_noise':
             all_mcmc_params = []
@@ -838,7 +841,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
         lnprob = lnprob_transit
     elif options['MODE'] == 'transit_noise':
         lnprob = lnprob_transit_noise
-    elif options['MODE'] == 'rv':
+    elif options['MODE'] == 'rvs':
         lnprob = lnprob_rv
     else:
         print 'Mode not supported. Doing nothing.'
@@ -1024,14 +1027,15 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
     mode = options['MODE']
     target = options['TARGET']
     fname = target+'_'+mode+'_'
-    for instrument in options['photometry'].keys():
-        fname = fname + instrument +'_'+options['photometry'][instrument]['PHOT_NOISE_MODEL']+\
-                      '_'+options['photometry'][instrument]['LD_LAW']+'_'
+    if mode != 'rvs':
+        for instrument in options['photometry'].keys():
+            fname = fname + instrument +'_'+options['photometry'][instrument]['PHOT_NOISE_MODEL']+\
+                          '_'+options['photometry'][instrument]['LD_LAW']+'_'
     out_dir = 'results/'+fname[:-1]+'/'
 
     plt.title('exonailer final fit + data')
     # If mode is not RV:
-    if options['MODE'] != 'rv':
+    if options['MODE'] != 'rvs':
         params = {}
         m = {}
         t_resampling = {}
@@ -1065,12 +1069,15 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
                transit_flat[instrument][idx_resampling[instrument]] = np.zeros(len(idx_resampling[instrument]))
 
     # Initialize the variable names:
-    if len(all_tr_instruments)>1:
-        transit_params = ['P','inc']
+    if options['MODE'] != 'rvs':
+        if len(all_tr_instruments)>1:
+            transit_params = ['P','inc']
+        else:
+            the_instrument = options['photometry'].keys()[0]
+            transit_params = ['P','inc','t0','a','p','inc','sigma_w','sigma_r','q1','q2']
+        common_params = ['ecc','omega']
     else:
-        the_instrument = options['photometry'].keys()[0]
-        transit_params = ['P','inc','t0','a','p','inc','sigma_w','sigma_r','q1','q2']
-    common_params = ['ecc','omega']
+        common_params = ['ecc','omega','P','t0']
 
     # If mode is not transit, prepare the data too:
     if 'transit' not in options['MODE']:
@@ -1110,7 +1117,7 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
     # each instrument in the MCMC, in order to keep track of the parameters that 
     # are being held constant between instruments and those that vary with instrument:
     sufix = {}
-    if options['MODE'] != 'rv':
+    if options['MODE'] != 'rvs':
         if len(all_tr_instruments)>1:
             # First, generate a sufix dictionary, which will add the sufix _instrument to 
             # each instrument in the MCMC, in order to keep track of the parameters that 
@@ -1247,7 +1254,7 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
 
     if options['MODE'] == 'transit':
        all_mcmc_params = transit_params + common_params
-    elif options['MODE'] == 'rv':
+    elif options['MODE'] == 'rvs':
        all_mcmc_params = rv_params + common_params
     elif options['MODE'] == 'transit_noise':
        all_mcmc_params = ['sigma_w','sigma_r']
@@ -1263,10 +1270,15 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
     elif options['MODE'] == 'transit':
         nrows = 1
         ncols = len(all_tr_instruments)
-
-    gridspec.GridSpec(nrows,len(all_tr_instruments))
-    # Plot transits:
-    if len(all_tr_instruments) == 1:
+    elif options['MODE'] == 'rvs':
+        nrows = 2
+        ncols = 1
+        all_tr_instruments = ['noinst']
+        gridspec.GridSpec(nrows,len(all_tr_instruments))
+    if options['MODE'] != 'rvs':
+      gridspec.GridSpec(nrows,len(all_tr_instruments))
+      # Plot transits:
+      if len(all_tr_instruments) == 1:
             plt.subplot2grid((nrows,ncols),(0,0),colspan=2)
             coeff1,coeff2 = reverse_ld_coeffs(options['photometry'][the_instrument]['LD_LAW'], \
                             parameters['q1']['object'].value,parameters['q2']['object'].value)
@@ -1332,7 +1344,7 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
             for i in range(len(idx_phase)):
                 fout_res.write('{0:.10f} {1:.10f} {2:.10f}\n'.format(xt[i],phase[i],residuals[i]))
             fout_res.close()
-    else:
+      else:
             #sufix[instrument][orig_par]
             for k in range(len(all_tr_instruments)):
                 plt.subplot2grid((nrows,ncols),(0,k))
@@ -1408,6 +1420,8 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
         radvel_params = init_radvel()
         if options['MODE'] == 'full':
             plt.subplot2grid((nrows,ncols),(1,0),colspan=ncols)
+        elif options['MODE'] == 'rvs':
+            plt.subplot2grid((nrows,ncols),(0,0),colspan=ncols)
         if len(all_rv_instruments) == 1:
             radvel_params['per1'] = radvel.Parameter(value=parameters['P']['object'].value)
             radvel_params['tc1'] = radvel.Parameter(value=parameters['t0']['object'].value)
@@ -1426,7 +1440,10 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
             idx_rv_model = np.argsort(model_phase)
             plt.plot(model_phase[idx_rv_model],model_pred[idx_rv_model]-parameters['mu']['object'].value)
             plt.ylabel('Radial velocity')
-            plt.subplot2grid((3,len(all_tr_instruments)),(2,0),colspan=len(all_tr_instruments))
+            if options['MODE'] == 'full': 
+                plt.subplot2grid((3,len(all_tr_instruments)),(2,0),colspan=len(all_tr_instruments))
+            elif options['MODE'] == 'rvs':
+                plt.subplot2grid((2,len(all_tr_instruments)),(1,0),colspan=len(all_tr_instruments))
             plt.errorbar(phase,residuals,rv_err,fmt='o')
             plt.ylabel('RV Residuals')
             plt.xlabel('Phase')

@@ -39,6 +39,8 @@ if options['MODE'] != 'rvs':
                                          (phases[idx]<options['photometry'][instrument]['PHASE_MAX_RESAMPLING']))[0]
         else:
             idx_resampling[instrument] = []
+else:
+    idx_resampling = []
 # Create results folder if not already created:
 if not os.path.exists('results'):
     os.mkdir('results')
@@ -46,9 +48,10 @@ if not os.path.exists('results'):
 mode = options['MODE']
 target = options['TARGET']
 fname = target+'_'+mode+'_'
-for instrument in options['photometry'].keys():
-    fname = fname + instrument +'_'+options['photometry'][instrument]['PHOT_NOISE_MODEL']+\
-                  '_'+options['photometry'][instrument]['LD_LAW']+'_'
+if options['MODE'] != 'rvs':
+    for instrument in options['photometry'].keys():
+        fname = fname + instrument +'_'+options['photometry'][instrument]['PHOT_NOISE_MODEL']+\
+                      '_'+options['photometry'][instrument]['LD_LAW']+'_'
 out_dir = 'results/'+fname[:-1]+'/'
 
 # If chains not ran, run the MCMC and save results:

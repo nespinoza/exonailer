@@ -114,9 +114,10 @@ def save_results(target,options,parameters):
     mode = options['MODE']
     target = options['TARGET']
     fname = target+'_'+mode+'_'
-    for instrument in options['photometry'].keys():
-        fname = fname + instrument +'_'+options['photometry'][instrument]['PHOT_NOISE_MODEL']+\
-                      '_'+options['photometry'][instrument]['LD_LAW']+'_'
+    if mode != 'rvs':
+        for instrument in options['photometry'].keys():
+            fname = fname + instrument +'_'+options['photometry'][instrument]['PHOT_NOISE_MODEL']+\
+                          '_'+options['photometry'][instrument]['LD_LAW']+'_'
     out_dir = 'results/'+fname[:-1]+'/'
     os.mkdir(out_dir)
     # Copy used prior file to the results folder:
@@ -150,9 +151,10 @@ def read_results(target,options,all_transit_instruments,all_rv_instruments):
     mode = options['MODE']
     target = options['TARGET']
     fname = target+'_'+mode+'_'
-    for instrument in options['photometry'].keys():
-        fname = fname + instrument +'_'+options['photometry'][instrument]['PHOT_NOISE_MODEL']+\
-                      '_'+options['photometry'][instrument]['LD_LAW']+'_'
+    if mode != 'rvs':
+        for instrument in options['photometry'].keys():
+            fname = fname + instrument +'_'+options['photometry'][instrument]['PHOT_NOISE_MODEL']+\
+                          '_'+options['photometry'][instrument]['LD_LAW']+'_'
     out_dir = 'results/'+fname[:-1]+'/'
     parameters = read_priors(options['TARGET'],options['MODE'])#target,all_transit_instruments,all_rv_instruments,mode,filename = out_dir+'priors.dat')
     thefile = open(out_dir+'posteriors.pkl','r')
@@ -457,7 +459,8 @@ def read_input_parameters():
                         opt_dict['rvs'][c_instrument][var.split()[0]] = None
                 
     fin.close()
-    for instrument in opt_dict['photometry'].keys():
-        if 'NOMIT' not in opt_dict['photometry'][instrument].keys():
-            opt_dict['photometry'][instrument]['NOMIT'] = np.array([])
+    if opt_dict['MODE'] != 'rvs':
+        for instrument in opt_dict['photometry'].keys():
+           if 'NOMIT' not in opt_dict['photometry'][instrument].keys():
+                opt_dict['photometry'][instrument]['NOMIT'] = np.array([])
     return opt_dict            
