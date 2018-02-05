@@ -1264,14 +1264,14 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
     # First, generate plot with gridspec according to the number of 
     # instruments used for transits:
     if options['MODE'] == 'full':
-        nrows = 3
+        nrows = 4
         ncols = len(all_tr_instruments)
-        gridspec.GridSpec(3,len(all_tr_instruments))
+        gridspec.GridSpec(nrows,len(all_tr_instruments))
     elif options['MODE'] == 'transit':
         nrows = 1
         ncols = len(all_tr_instruments)
     elif options['MODE'] == 'rvs':
-        nrows = 2
+        nrows = 3
         ncols = 1
         all_tr_instruments = ['noinst']
         gridspec.GridSpec(nrows,len(all_tr_instruments))
@@ -1440,10 +1440,25 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
             idx_rv_model = np.argsort(model_phase)
             plt.plot(model_phase[idx_rv_model],model_pred[idx_rv_model]-parameters['mu']['object'].value)
             plt.ylabel('Radial velocity')
+            plt.xlabel('Phase')
+
             if options['MODE'] == 'full': 
-                plt.subplot2grid((3,len(all_tr_instruments)),(2,0),colspan=len(all_tr_instruments))
+                plt.subplot2grid((4,len(all_tr_instruments)),(2,0),colspan=len(all_tr_instruments))
             elif options['MODE'] == 'rvs':
-                plt.subplot2grid((2,len(all_tr_instruments)),(1,0),colspan=len(all_tr_instruments))
+                plt.subplot2grid((3,len(all_tr_instruments)),(1,0),colspan=len(all_tr_instruments))
+
+            tzero = int(xrv[0])
+            plt.errorbar(xrv-tzero,(yrv-parameters['mu']['object'].value),rv_err,fmt='o')
+            ttmodel = np.linspace(np.min(xrv),np.max(xrv),1000)
+            mmodel = radvel.model.RVModel(radvel_params).__call__(ttmodel)
+            plt.plot(ttmodel-tzero,mmodel)
+            plt.ylabel('Radial velocity')
+            plt.xlabel('Time - '+str(tzero))
+
+            if options['MODE'] == 'full': 
+                plt.subplot2grid((4,len(all_tr_instruments)),(3,0),colspan=len(all_tr_instruments))
+            elif options['MODE'] == 'rvs':
+                plt.subplot2grid((3,len(all_tr_instruments)),(2,0),colspan=len(all_tr_instruments))
             plt.errorbar(phase,residuals,rv_err,fmt='o')
             plt.ylabel('RV Residuals')
             plt.xlabel('Phase')
@@ -1501,7 +1516,30 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
             fout_model.close()
             plt.legend()
             plt.ylabel('Radial velocity')
-            plt.subplot2grid((3,len(all_tr_instruments)),(2,0),colspan=len(all_tr_instruments))
+            plt.xlabel('Phase')
+            plt.subplot2grid((4,len(all_tr_instruments)),(2,0),colspan=len(all_tr_instruments))
+
+            xrv_min = np.inf
+            xrv_max = -np.inf
+            for i in range(len(all_rv_instruments)):
+                if np.min(xrv[all_rv_instruments_idxs[i]])<xrv_min:
+                    xrv_min = np.min(xrv[all_rv_instruments_idxs[i]])
+                if np.max(xrv[all_rv_instruments_idxs[i]])>xrv_max:
+                    xrv_max = np.max(xrv[all_rv_instruments_idxs[i]])
+
+            tzero = int(xrv_min)
+            for i in range(len(all_rv_instruments)):
+                plt.errorbar(xrv[all_rv_instruments_idxs[i]]-tzero,(yrv[all_rv_instruments_idxs[i]]-parameters['mu_'+all_rv_instruments[i]]['object'].value),\
+                             yerr=rv_err[all_rv_instruments_idxs[i]],label=all_rv_instruments[i],fmt='o')
+
+            ttmodel = np.linspace(xrv_min,xrv_max,1000)
+            mmodel = radvel.model.RVModel(radvel_params).__call__(ttmodel)
+            plt.plot(ttmodel-tzero,mmodel)
+            plt.ylabel('Radial velocity')
+            plt.xlabel('Time - '+str(tzero))
+
+
+            plt.subplot2grid((4,len(all_tr_instruments)),(3,0),colspan=len(all_tr_instruments))
             for i in range(len(all_rv_instruments)):
                 plt.errorbar(all_phases[i],all_residuals[i],yerr=rv_err[all_rv_instruments_idxs[i]],fmt='o')
             plt.ylabel('RV Residuals')
