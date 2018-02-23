@@ -17,7 +17,7 @@ except:
 import numpy as np
 import batman
 import radvel
-
+log2pi = np.log(2.*np.pi)
 # This defines prior distributions that need samples to be
 # controlled so they don't get out of their support:
 prior_distributions = ['Uniform','Jeffreys','Beta']
@@ -175,7 +175,10 @@ def init_batman(t,law):
     params.inc = 87.
     params.ecc = 0.
     params.w = 90.
-    params.u = [0.1,0.3]
+    if law == 'linear':
+        params.u = [0.5]
+    else:
+        params.u = [0.1,0.3]
     params.limb_dark = law
     m = batman.TransitModel(params,t)
     return params,m
@@ -191,7 +194,10 @@ def get_transit_model(t,t0,P,p,a,inc,q1,q2,ld_law):
     params.rp = p
     params.a = a
     params.inc = inc
-    params.u = [coeff1,coeff2]
+    if ld_law == 'linear':
+        params.u = [coeff1]
+    else:
+        params.u = [coeff1,coeff2]
     return m.light_curve(params)
 
 def convert_ld_coeffs(ld_law, coeff1, coeff2):
@@ -204,6 +210,8 @@ def convert_ld_coeffs(ld_law, coeff1, coeff2):
     elif ld_law=='logarithmic':
         q1 = (1-coeff2)**2
         q2 = (1.-coeff1)/(1.-coeff2)
+    elif ld_law=='linear':
+        return coeff1,0.0
     return q1,q2
 
 def reverse_ld_coeffs(ld_law, q1, q2):
@@ -216,6 +224,9 @@ def reverse_ld_coeffs(ld_law, q1, q2):
     elif ld_law=='logarithmic':
         coeff1 = 1.-np.sqrt(q1)*q2
         coeff2 = 1.-np.sqrt(q1)
+    if ld_law =='linear':
+        coeff1 = q1
+        coeff2 = 0.0
     return coeff1,coeff2
 
 def count_instruments(instrument_list):
@@ -528,7 +539,6 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
             all_mcmc_params = transit_params + rv_params + common_params
 
     n_params = len(all_mcmc_params)
-    log2pi = np.log(2.*np.pi)
     def normal_like(x,mu,tau):
         return 0.5*(np.log(tau) - log2pi - tau*( (x-mu)**2))
 
@@ -1291,7 +1301,7 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
             params[the_instrument].w = parameters['omega']['object'].value
             params[the_instrument].u = [coeff1,coeff2]
             model = m[the_instrument].light_curve(params[the_instrument])
-            model_t = np.linspace(np.min(xt),np.max(xt),len(xt)*4)
+            model_t = np.linspace(np.min(xt),np.max(xt),len(xt)*100)#4)
             model_phase = get_phases(model_t,params[the_instrument].per,params[the_instrument].t0)
             phase = get_phases(xt,params[the_instrument].per,params[the_instrument].t0)
             if options['photometry'][the_instrument]['RESAMPLING']:
@@ -1344,8 +1354,40 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
             for i in range(len(idx_phase)):
                 fout_res.write('{0:.10f} {1:.10f} {2:.10f}\n'.format(xt[i],phase[i],residuals[i]))
             fout_res.close()
+
+            # Get log-likelihood for transit fit:
+            if options['photometry'][the_instrument]['PHOT_NOISE_MODEL'] == 'flicker':
+               log_like = exonailer_mcmc_fit.get_fn_likelihood(residuals*1e6,parameters['sigma_w']['object'].value,\
+                               parameters['sigma_r']['object'].value)
+            elif options['photometry'][the_instrument]['PHOT_NOISE_MODEL'] == 'GPExpSquaredKernel':
+               log_like = exonailer_mcmc_fit.get_sq_exp_likelihood(xt,residuals*1e6,yerrt*1e6,\
+                              parameters['sigma_w']['object'].value,\
+                              parameters['lnh']['object'].value,\
+                              parameters['lnlambda']['object'].value)
+            elif options['photometry'][the_instrument]['PHOT_NOISE_MODEL'] == 'GPGranulation':
+               log_like = exonailer_mcmc_fit.get_granulation_likelihood(xt,residuals*1e6,yerrt*1e6,\
+                              parameters['sigma_w']['object'].value,\
+                              parameters['lnomega']['object'].value,\
+                              parameters['lnS']['object'].value)
+            elif options['photometry'][the_instrument]['PHOT_NOISE_MODEL'] == 'GPAsteroseismology':
+               log_like = exonailer_mcmc_fit.get_asteroseismology_likelihood(xt,residuals*1e6,yerrt*1e6,\
+                              parameters['sigma_w']['object'].value,\
+                              parameters['lnomega']['object'].value,\
+                              parameters['lnS']['object'].value,\
+                              parameters['lnQ']['object'].value,\
+                              parameters['lnA']['object'].value,\
+                              parameters['epsilon']['object'].value,\
+                              parameters['lnW']['object'].value,\
+                              parameters['lnnu']['object'].value,\
+                              parameters['lnDeltanu']['object'].value,\
+                              the_instrument)
+            else:
+               taus = 1.0/((yerrt*1e6)**2 + (parameters['sigma_w']['object'].value)**2)
+               log_like = -0.5*(n_data_trs[0]*log2pi+np.sum(np.log(1./taus)+taus*((residuals*1e6)**2)))
+            print '\t Log-likelihood for transit fit:',log_like
       else:
             #sufix[instrument][orig_par]
+            log_like = 0.0
             for k in range(len(all_tr_instruments)):
                 plt.subplot2grid((nrows,ncols),(0,k))
                 if k == 0:
@@ -1414,6 +1456,37 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
                 for i in range(len(idx_phase)):
                     fout_res.write('{0:.10f} {1:.10f}\n'.format(phase[i],residuals[i]))
                 fout_res.close()
+                # Get log-likelihood for transit fit(s):
+                if options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'flicker':
+                   log_like = log_like + get_fn_likelihood(residuals*1e6,parameters['sigma_w'+sufix[instrument]['sigma_w']]['object'].value,\
+                                   parameters['sigma_r'+sufix[instrument]['sigma_r']]['object'].value)
+                elif options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'GPExpSquaredKernel':
+                   log_like = log_like + get_sq_exp_likelihood(xt[all_tr_instruments_idxs[k]],residuals*1e6,yerrt[all_tr_instruments_idxs[k]]*1e6,\
+                              parameters['sigma_w'+sufix[instrument]['sigma_w']]['object'].value,\
+                              parameters['lnh'+sufix[instrument]['lnh']]['object'].value,\
+                              parameters['lnlambda'+sufix[instrument]['lnlambda']]['object'].value)
+                elif options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'GPGranulation':
+                   log_like = log_like + get_granulation_likelihood(xt[all_tr_instruments_idxs[k]],residuals*1e6,yerrt[all_tr_instruments_idxs[k]]*1e6,\
+                              parameters['sigma_w'+sufix[instrument]['sigma_w']]['object'].value,\
+                              parameters['lnomega'+sufix[instrument]['lnomega']]['object'].value,\
+                              parameters['lnS'+sufix[instrument]['lnS']]['object'].value)
+                elif options['photometry'][instrument]['PHOT_NOISE_MODEL'] == 'GPAsteroseismology':
+                   log_like = log_like + get_asteroseismology_likelihood(xt[all_tr_instruments_idxs[k]],residuals*1e6,yerrt[all_tr_instruments_idxs[k]]*1e6,\
+                              parameters['sigma_w'+sufix[instrument]['sigma_w']]['object'].value,\
+                              parameters['lnomega'+sufix[instrument]['lnomega']]['object'].value,\
+                              parameters['lnS'+sufix[instrument]['lnS']]['object'].value,\
+                              parameters['lnQ'+sufix[instrument]['lnQ']]['object'].value,\
+                              parameters['lnA'+sufix[instrument]['lnA']]['object'].value,\
+                              parameters['epsilon'+sufix[instrument]['epsilon']]['object'].value,\
+                              parameters['lnW'+sufix[instrument]['lnW']]['object'].value,\
+                              parameters['lnnu'+sufix[instrument]['lnnu']]['object'].value,\
+                              parameters['lnDeltanu'+sufix[instrument]['lnDeltanu']]['object'].value,\
+                              instrument)
+                else:
+                   taus = 1.0/((yerrt[all_tr_instruments_idxs[k]]*1e6)**2 + (parameters['sigma_w'+sufix[instrument]['sigma_w']]['object'].value)**2)
+                   log_like = log_like - 0.5*(n_data_trs[k]*log2pi+np.sum(np.log(1./taus)+taus*((residuals*1e6)**2)))
+
+            print '\t Log-likelihood for transit fit(s):',log_like  
 
     # Plot RVs:
     if options['MODE'] != 'transit':
@@ -1475,6 +1548,11 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
             for i in range(len(phase)):
                 fout_res.write('{0:.10f} {1:.10f} {2:.10f}\n'.format(phase[i],residuals[i],rv_err[i]))
             fout_res.close()
+
+            # Get RV log-likelihood:
+            taus = 1.0/((rv_err)**2 + (parameters['sigma_w_rv']['object'].value)**2)
+            log_like = -0.5*(n_data_rvs[0]*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
+            print '\t Log-likelihood radial-velocity:',log_like
         else:
             log_like = 0.0
             all_residuals = []
@@ -1505,6 +1583,9 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
                 fout_res = open(out_dir+'rv_residuals_'+all_rv_instruments[i]+'.dat','w')
                 for ii in range(len(phase)):
                     fout_res.write('{0:.10f} {1:.10f} {2:.10f}\n'.format(phase[ii],residuals[ii],rv_err[all_rv_instruments_idxs[i]][ii]))
+                taus = 1.0/((rv_err[all_rv_instruments_idxs[i]])**2 + (parameters['sigma_w_rv'+sufix[all_rv_instruments[i]]['sigma_w_rv']]['object'].value)**2)
+                log_like = log_like -0.5*(n_data_rvs[i]*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))          
+            print '\t Log-likelihood radial velocities:',log_like      
             fout_res.close()
             model_phase = get_phases(model_t,parameters['P']['object'].value,parameters['t0']['object'].value)
             idx_rvs_sorted = np.argsort(model_phase)
