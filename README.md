@@ -143,6 +143,11 @@ The **PHOTOMETRY OPTIONS** have to be defined for each instrument. For each one,
                           JD format, i.e., JD, BJD, MDJ, etc.) of the transit times. If input transit times 
                           are, for example, in utc and you want results in tdb, this has to be 'utc->tdb'.
 
+    STELLARDENSITY:       If you have a stellar density measurement for your object of interest, this can help 
+                          constrain a/R*, the period, or both (via Kepler's third law). If you have an estimate, 
+                          you can input it by defining the mean and error `mean,error`. This assumes the inputted 
+                          density is in kg/m^3.
+
 The **RADIAL-VELOCITY OPTIONS** have to be defined for each instrument as well. For each one, you must define:
 
     INSTRUMENT:           The name of the instrument. These have to match the instruments in the radial-velocity 

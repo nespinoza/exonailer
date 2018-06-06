@@ -90,6 +90,7 @@ def read_data(options):
         rv_data = np.genfromtxt('rv_data/'+target+'_rvs.dat',dtype='|S100')
         # Get times and RVs:
         t_rv = rv_data[:,0].astype('float')
+        #print rv_data
         rv = rv_data[:,1].astype('float')
         # If more than four columns, assume fourth is instrument name, if only three,
         # assume only errors are passed. If only two, fill instrument name with generic name:
@@ -437,6 +438,11 @@ def read_input_parameters():
                     elif var.split()[0] in ['NOMIT']:
                             nomits = opt.split()[0].split(',')
                             opt_dict['photometry'][c_instrument][var.split()[0]] = np.array(nomits).astype(int)
+                    elif var.split()[0] in ['STELLARDENSITY']:
+                            mean,sigma = opt.split()[0].split(',')
+                            opt_dict['stellardensity'] = {}
+                            opt_dict['stellardensity']['mean'] = np.double(mean)
+                            opt_dict['stellardensity']['sigma'] = np.double(sigma)
                     if opt.split()[0].lower() == 'yes' or opt.split()[0].lower() == 'true':
                         opt_dict['photometry'][c_instrument][var.split()[0]] = True
                     elif opt.split()[0].lower() == 'no' or opt.split()[0].lower() == 'false':

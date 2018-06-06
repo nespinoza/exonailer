@@ -18,6 +18,7 @@ import numpy as np
 import batman
 import radvel
 log2pi = np.log(2.*np.pi)
+G = 6.67408e-11 # Grav. constant in mks
 # This defines prior distributions that need samples to be
 # controlled so they don't get out of their support:
 prior_distributions = ['Uniform','Jeffreys','Beta']
@@ -714,6 +715,13 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
             else:
                taus = 1.0/((yerrt*1e6)**2 + (parameters['sigma_w']['object'].value)**2)
                log_like = -0.5*(n_data_trs[0]*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
+            if 'stellardensity' in options.keys():
+                sd_mean = options['stellardensity']['mean']
+                sd_sigma = options['stellardensity']['sigma']
+                #print 'val:',sd_mean,sd_sigma
+                model = ((3.*np.pi)/(G*(parameters['P']['object'].value*(24.*3600.0))**2))*(parameters['a']['object'].value)**3
+                #print 'model:',model
+                log_like = log_like - 0.5*(log2pi + 2.*np.log(sd_sigma) + ((model-sd_mean)/sd_sigma)**2)
             #print 'Median residuals:',np.median(residuals)
             #print 'Transit log-like:',log_like
             return log_like
@@ -768,6 +776,11 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
                 else:
                    taus = 1.0/((yerrt[all_tr_instruments_idxs[k]]*1e6)**2 + (parameters['sigma_w'+sufix[instrument]['sigma_w']]['object'].value)**2)
                    log_like = log_like - 0.5*(n_data_trs[k]*log2pi+np.sum(np.log(1./taus)+taus*(residuals**2)))
+            if 'stellardensity' in options.keys():
+                sd_mean = options['stellardensity']['mean']
+                sd_sigma = options['stellardensity']['sigma']
+                model = ((3.*np.pi)/(G*(parameters['P']['object'].value*(24.*3600.0))**2))*(parameters['a'+sufix[instrument]['a']]['object'].value)**3
+                log_like = log_like - 0.5*(log2pi + 2.*np.log(sd_sigma) + ((model-sd_mean)/sd_sigma)**2)
             return log_like
             
 
