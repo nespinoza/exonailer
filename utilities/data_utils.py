@@ -246,10 +246,7 @@ import emcee
 import Wavelets
 import scipy.optimize as op
 def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv, rv_err, rv_instruments,\
-                       parameters, idx_resampling, options,texp = 0.01881944):
-                       #ld_law, mode, rv_jitter = False, \
-                       #njumps = 500, nburnin = 500, nwalkers = 100, noise_model = 'white',\
-                       #resampling = False, idx_resampling = [], texp = 0.01881944, N_resampling = 5):
+                       parameters, idx_resampling, options):
     """
     This function performs an MCMC fitting procedure using a transit model 
     fitted to input data using the batman package (Kreidberg, 2015) assuming 
@@ -288,9 +285,6 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
 
       options:          Dictionary containing the information inputted by the user.
 
-      texp          :   Exposure time in days of each datapoint (default is Kepler long-cadence, 
-                        taken from here: http://archive.stsci.edu/mast_faq.php?mission=KEPLER)
-
     The outputs are the chains of each of the parameters in the theta_0 array in the same 
     order as they were inputted. This includes the sampled parameters from all the walkers.
 
@@ -322,7 +316,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
                    for j in range(1,options['photometry'][instrument]['NRESAMPLING']+1):
                        # Eq (35) in Kipping (2010)    
                        tij[j-1] = xt[all_tr_instruments_idxs[k]][idx_resampling[instrument][i]] + ((j - \
-                                  ((options['photometry'][instrument]['NRESAMPLING']+1)/2.))*(texp/np.double(\
+                                  ((options['photometry'][instrument]['NRESAMPLING']+1)/2.))*(options['photometry'][instrument]['TEXP']/np.double(\
                                   options['photometry'][instrument]['NRESAMPLING'])))
                    t_resampling[instrument] = np.append(t_resampling[instrument], np.copy(tij))
 
@@ -493,7 +487,7 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
                         par = par+'_'+instrument
                         sufix[instrument][orig_par] = '_'+instrument
                         if par not in parameters.keys():
-                            print 'Error: parameter '+orig_par+' not defined. Exiting...'
+                            print 'Error: parameter '+orig_par+' not defined for instrument '+instrument+'. Exiting...'
                             sys.exit()
                     if par not in rv_params:
                         rv_params.append(par)
@@ -957,95 +951,8 @@ def exonailer_mcmc_fit(times, relative_flux, error, tr_instruments, times_rv, rv
         initial_values[all_mcmc_params[i]] = parameters[all_mcmc_params[i]]['object'].value
 
 import matplotlib.pyplot as plt
-def plot_transit(t,f,parameters,ld_law,transit_instruments,\
-                 resampling = False, phase_max = 0.025, \
-                 idx_resampling_pred = [], texp = 0.01881944, N_resampling = 5):
-        
-    # Extract transit parameters:
-    P = parameters['P']['object'].value
-    inc = parameters['inc']['object'].value
-    a = parameters['a']['object'].value
-    p = parameters['p']['object'].value
-    t0 = parameters['t0']['object'].value
-    q1 = parameters['q1']['object'].value
-    q2 = parameters['q2']['object'].value
-
-    # Get data phases:
-    phases = get_phases(t,P,t0)
-
-    # Generate model times by super-sampling the times:
-    model_t = np.linspace(np.min(t),np.max(t),len(t)*N_resampling)
-    model_phase = get_phases(model_t,P,t0)
-
-    # Initialize the parameters of the transit model, 
-    # and prepare resampling data if resampling is True:
-    if resampling:
-        idx_resampling = np.where((model_phase>-phase_max)&(model_phase<phase_max))[0]
-        t_resampling = np.array([])
-        for i in range(len(idx_resampling)):
-            tij = np.zeros(N_resampling)
-            for j in range(1,N_resampling+1):
-                # Eq (35) in Kipping (2010)    
-                tij[j-1] = model_t[idx_resampling[i]] + ((j - ((N_resampling+1)/2.))*(texp/np.double(N_resampling)))
-            t_resampling = np.append(t_resampling, np.copy(tij))
-
-        idx_resampling_pred = np.where((phases>-phase_max)&(phases<phase_max))[0]
-        t_resampling_pred = np.array([])
-        for i in range(len(idx_resampling_pred)):
-            tij = np.zeros(N_resampling)
-            for j in range(1,N_resampling+1):
-                tij[j-1] = t[idx_resampling_pred[i]] + ((j - ((N_resampling+1)/2.))*(texp/np.double(N_resampling)))
-            t_resampling_pred = np.append(t_resampling_pred, np.copy(tij))
-        params,m = init_batman(t_resampling, law=ld_law)
-        params2,m2 = init_batman(t_resampling_pred, law=ld_law)
-        transit_flat = np.ones(len(model_t))
-        transit_flat[idx_resampling] = np.zeros(len(idx_resampling))
-        transit_flat_pred = np.ones(len(t))
-        transit_flat_pred[idx_resampling_pred] = np.zeros(len(idx_resampling_pred))
-
-    else:
-        params,m = init_batman(model_t,law=ld_law)
-        params2,m2 = init_batman(t,law=ld_law)
-    #####################################################################
-
-    coeff1,coeff2 = reverse_ld_coeffs(ld_law, q1, q2)
-    params.t0 = t0
-    params.per = P
-    params.rp = p
-    params.a = a
-    params.inc = inc
-    params.u = [coeff1,coeff2]
-
-    # Generate model and predicted lightcurves:
-    if resampling:
-        model = m.light_curve(params)
-        for i in range(len(idx_resampling)):
-            transit_flat[idx_resampling[i]] = np.mean(model[i*N_resampling:N_resampling*(i+1)])
-        model_lc = transit_flat
-
-        model = m2.light_curve(params)
-        for i in range(len(idx_resampling_pred)):
-            transit_flat_pred[idx_resampling_pred[i]] = np.mean(model[i*N_resampling:N_resampling*(i+1)])
-        model_pred = transit_flat_pred
-    else:
-        model_lc = m.light_curve(params)
-        model_pred = m2.light_curve(params)
-
-    # Now plot:
-    plt.style.use('ggplot')
-    plt.title('exonailer final fit + phased data')
-    plt.xlabel('Phase')
-    plt.ylabel('Relative flux')
-    idx = np.argsort(model_phase)
-    plt.plot(phases,f,'.',color='black',alpha=0.4)
-    plt.plot(model_phase[idx],model_lc[idx])
-    idx_ph = np.argsort(phases)
-    plt.plot(phases[idx_ph],np.ones(len(phases))*(1-2.5*p**2),'--',color='r')
-    plt.plot(phases,(f-model_pred) + (1-2.5*p**2),'.',color='black',alpha=0.4)
-    plt.show()
-
 def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, rv, rv_err, rv_instruments,\
-                       parameters, idx_resampling, options, texp = 0.01881944):
+                       parameters, idx_resampling, options, texp = 0.020434):
     # Generate out_dir folder name (for saving residuals, models, etc.):
     mode = options['MODE']
     target = options['TARGET']
@@ -1082,7 +989,7 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
                    for j in range(1,options['photometry'][instrument]['NRESAMPLING']+1):
                        # Eq (35) in Kipping (2010)    
                        tij[j-1] = xt[all_tr_instruments_idxs[k]][idx_resampling[instrument][i]] + ((j - \
-                                  ((options['photometry'][instrument]['NRESAMPLING']+1)/2.))*(texp/np.double(\
+                                  ((options['photometry'][instrument]['NRESAMPLING']+1)/2.))*(options['photometry'][instrument]['TEXP']/np.double(\
                                   options['photometry'][instrument]['NRESAMPLING'])))
                    t_resampling[instrument] = np.append(t_resampling[instrument], np.copy(tij))
 
@@ -1330,7 +1237,7 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
                for i in range(len(idx_resampling_pred)):
                    tij = np.zeros(options['photometry'][the_instrument]['NRESAMPLING'])
                    for j in range(1,options['photometry'][the_instrument]['NRESAMPLING']+1):
-                       tij[j-1] = model_t[idx_resampling_pred[i]] + ((j - ((options['photometry'][the_instrument]['NRESAMPLING']+1)/2.))*(texp/\
+                       tij[j-1] = model_t[idx_resampling_pred[i]] + ((j - ((options['photometry'][the_instrument]['NRESAMPLING']+1)/2.))*(options['photometry'][the_instrument]['TEXP']/\
                                   np.double(options['photometry'][the_instrument]['NRESAMPLING'])))
                    t_resampling_pred = np.append(t_resampling_pred, np.copy(tij))
                params2,m2 = init_batman(t_resampling_pred, law=options['photometry'][the_instrument]['LD_LAW'])
@@ -1433,7 +1340,7 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
                    for i in range(len(idx_resampling_pred)):
                        tij = np.zeros(options['photometry'][instrument]['NRESAMPLING'])
                        for j in range(1,options['photometry'][instrument]['NRESAMPLING']+1):
-                           tij[j-1] = model_t[idx_resampling_pred[i]] + ((j - ((options['photometry'][instrument]['NRESAMPLING']+1)/2.))*(texp/\
+                           tij[j-1] = model_t[idx_resampling_pred[i]] + ((j - ((options['photometry'][instrument]['NRESAMPLING']+1)/2.))*(options['photometry'][instrument]['TEXP']/\
                                   np.double(options['photometry'][instrument]['NRESAMPLING'])))
                        t_resampling_pred = np.append(t_resampling_pred, np.copy(tij))
                    params2,m2 = init_batman(t_resampling_pred, law=options['photometry'][instrument]['LD_LAW'])
@@ -1644,152 +1551,3 @@ def plot_transit_and_rv(times, relative_flux, error, tr_instruments, times_rv, r
         plt.savefig(out_dir+'fig.png',dpi=300)
     else:
         plt.clf()
-
-    """
-    # Extract parameters:
-    P = parameters['P']['object'].value
-    inc = parameters['inc']['object'].value
-    a = parameters['a']['object'].value
-    p = parameters['p']['object'].value
-    t0 = parameters['t0']['object'].value
-    q1 = parameters['q1']['object'].value
-    q2 = parameters['q2']['object'].value
-    K = parameters['K']['object'].value
-    ecc = parameters['ecc']['object'].value
-    omega = parameters['omega']['object'].value
-    all_rv_instruments,all_rv_instruments_idxs,n_data_rvs = count_instruments(rv_instruments)
-    if len(all_rv_instruments)>1:
-        mu = {}
-        for instrument in all_rv_instruments:
-            mu[instrument] = parameters['mu_'+instrument]['object'].value
-    else:
-        mu = parameters['mu']['object'].value
-        print mu
-
-    # Get data phases:
-    phases = get_phases(t,P,t0)
-
-    # Generate model times by super-sampling the times:
-    model_t = np.linspace(np.min(t),np.max(t),len(t)*4)
-    model_phase = get_phases(model_t,P,t0)
-
-    # Initialize the parameters of the transit model, 
-    # and prepare resampling data if resampling is True:
-    if resampling:
-        idx_resampling = np.where((model_phase>-phase_max)&(model_phase<phase_max))[0]
-        t_resampling = np.array([])
-        for i in range(len(idx_resampling)):
-            tij = np.zeros(N_resampling)
-            for j in range(1,N_resampling+1):
-                # Eq (35) in Kipping (2010)    
-                tij[j-1] = model_t[idx_resampling[i]] + ((j - ((N_resampling+1)/2.))*(texp/np.double(N_resampling)))
-            t_resampling = np.append(t_resampling, np.copy(tij))    
-
-        idx_resampling_pred = np.where((phases>-phase_max)&(phases<phase_max))[0]
-        t_resampling_pred = np.array([])
-        for i in range(len(idx_resampling_pred)):
-            tij = np.zeros(N_resampling)
-            for j in range(1,N_resampling+1):
-                tij[j-1] = t[idx_resampling_pred[i]] + ((j - ((N_resampling+1)/2.))*(texp/np.double(N_resampling)))
-            t_resampling_pred = np.append(t_resampling_pred, np.copy(tij))
-        params,m = init_batman(t_resampling, law=ld_law)
-        params2,m2 = init_batman(t_resampling_pred, law=ld_law)
-        transit_flat = np.ones(len(model_t))
-        transit_flat[idx_resampling] = np.zeros(len(idx_resampling))
-        transit_flat_pred = np.ones(len(t))
-        transit_flat_pred[idx_resampling_pred] = np.zeros(len(idx_resampling_pred))
-
-    else:
-        params,m = init_batman(model_t,law=ld_law)
-        params2,m2 = init_batman(t,law=ld_law)
-
-    coeff1,coeff2 = reverse_ld_coeffs(ld_law, q1, q2)
-    params.t0 = t0
-    params.per = P
-    params.rp = p
-    params.a = a
-    params.inc = inc
-    params.ecc = ecc
-    params.omega = omega
-    params.u = [coeff1,coeff2]
-
-    # Generate model and predicted lightcurves:
-    if resampling:
-        model = m.light_curve(params)
-        for i in range(len(idx_resampling)):
-            transit_flat[idx_resampling[i]] = np.mean(model[i*N_resampling:N_resampling*(i+1)])
-        model_lc = transit_flat
-
-        model = m2.light_curve(params)
-        for i in range(len(idx_resampling_pred)):
-            transit_flat_pred[idx_resampling_pred[i]] = np.mean(model[i*N_resampling:N_resampling*(i+1)])
-        model_pred = transit_flat_pred
-    else:
-        model_lc = m.light_curve(params)
-        model_pred = m2.light_curve(params)
-
-    # Now plot:
-    plt.style.use('ggplot')
-    plt.subplot(211)
-    #plt.xlabel('Phase')
-    plt.title('exonailer final fit + data')
-    plt.ylabel('Relative flux')
-    idx = np.argsort(model_phase)
-    plt.plot(phases,f,'.',color='black',alpha=0.4)
-    plt.plot(model_phase[idx],model_lc[idx])
-    plt.plot(phases,f-model_pred+(1-1.8*(p**2)),'.',color='black',alpha=0.4)
-
-    plt.subplot(212)
-    plt.ylabel('Radial velocity (m/s)')
-    plt.xlabel('Phase')
-    model_rv = rv_model.pl_rv_array(model_t,0.0,K,omega*np.pi/180.,ecc,t0,P)
-    predicted_rv = rv_model.pl_rv_array(trv,0.0,K,omega*np.pi/180.,ecc,t0,P)
-    if len(all_rv_instruments)>1:
-        for i in range(len(all_rv_instruments)):
-            rv_phases = get_phases(trv[all_rv_instruments_idxs[i]],P,t0)
-            plt.errorbar(rv_phases,(rv[all_rv_instruments_idxs[i]]-mu[all_rv_instruments[i]])*1e3,yerr=rv_err[all_rv_instruments_idxs[i]]*1e3,fmt='o',label='RVs from '+all_rv_instruments[i])
-        plt.legend()
-    else:
-        rv_phases = get_phases(trv,P,t0)
-        plt.errorbar(rv_phases,(rv-mu)*1e3,yerr=rv_err*1e3,fmt='o')
-    plt.plot(model_phase[idx],(model_rv[idx])*1e3)
-    plt.show()
-    opt = raw_input('\t Save lightcurve and RV data and models? (y/n)')
-    if opt == 'y':
-        fname = raw_input('\t Output filename (without extension): ')   
-        fout = open('results/'+fname+'_lc_data.dat','w')
-        fout.write('# Time    Phase     Normalized flux \n')
-        for i in range(len(phases)):
-            fout.write(str(t[i])+' '+str(phases[i])+' '+str(f[i])+'\n')
-        fout.close()
-        fout = open('results/'+fname+'_lc_model.dat','w')
-        fout.write('# Phase     Normalized flux \n')
-        for i in range(len(model_phase[idx])):
-            fout.write(str(model_phase[idx][i])+' '+str(model_lc[idx][i])+'\n')
-        fout.close()
-        fout = open('results/'+fname+'_o-c_lc.dat','w')
-        for i in range(len(phases)):
-            fout.write(str(t[i])+' '+str(phases[i])+' '+str(f[i]-model_pred[i])+'\n')
-        fout.close()
-        fout = open('results/'+fname+'_rvs_data.dat','w')
-        fout2 = open('results/'+fname+'_o-c_rvs.dat','w')
-        fout.write('# Phase     RV (m/s)  Error (m/s)  Instrument\n')
-        if len(all_rv_instruments)>1:
-            for i in range(len(all_rv_instruments)):
-                rv_phases = get_phases(trv[all_rv_instruments_idxs[i]],P,t0)
-                for j in range(len(rv_phases)):
-                    fout.write(str(rv_phases[j])+' '+str(((rv[all_rv_instruments_idxs[i]]-mu[all_rv_instruments[i]])*1e3)[j])+\
-                                    ' '+str(((rv_err[all_rv_instruments_idxs[i]])*1e3)[j])+\
-                                    ' '+all_rv_instruments[i]+'\n')
-        else:
-            for i in range(len(rv_phases)):
-                fout.write(str(rv_phases[i])+' '+str((rv[i]-mu)*1e3)+' '+str(rv_err[i]*1e3)+' \n')
-                fout2.write(str(rv_phases[i])+' '+str((rv[i]-mu-predicted_rv[i])*1e3)+' '+str(rv_err[i]*1e3)+' \n')
-        fout.close()
-        fout2.close()
-        fout = open('results/'+fname+'_rvs_model.dat','w')
-        fout.write('# Phase     RV (m/s) \n')
-        for i in range(len(model_phase[idx])):
-            fout.write(str(model_phase[idx][i])+' '+str(((model_rv[idx])*1e3)[i])+'\n')
-        fout.close()
-    """

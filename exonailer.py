@@ -65,15 +65,6 @@ if not os.path.exists(out_dir):
 else:
     parameters = general_utils.read_results(target,options,transit_instruments,rv_instruments)
 
-# Get plot of the transit-fit, rv-fit or both (TODO: this is missing the RV fit alone!):
-#if options['MODE'] == 'transit':
-#    data_utils.plot_transit(t_tr,f,parameters,ld_law,transit_instruments, resampling = resampling, \
-#                                      phase_max = phase_max, N_resampling=N_resampling)
 if options['MODE'] != 'transit_noise':
     data_utils.plot_transit_and_rv(t_tr, f, f_err, transit_instruments, t_rv, rv, rv_err, rv_instruments,\
-                               parameters, idx_resampling, options)
-                                    #t_tr,f,f_err,t_rv,rv,rv_err,parameters,transit_instruments, rv_instruments,\
-                                    #  options)#ld_law,rv_jitter, \
-                                      #transit_instruments, rv_instruments,\
-                                      #resampling = resampling, phase_max = phase_max, \
-                                      #N_resampling=N_resampling)
+                                   parameters, idx_resampling, options)

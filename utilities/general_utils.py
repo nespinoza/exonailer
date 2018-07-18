@@ -433,7 +433,7 @@ def read_input_parameters():
                     opt_dict['photometry'][c_instrument][var.split()[0]] = opt.split()[0]
                     if var.split()[0] in ['WINDOW','NRESAMPLING','NASTEROSEISMOLOGY']:
                         opt_dict['photometry'][c_instrument][var.split()[0]] = int(opt.split()[0])
-                    elif var.split()[0] in ['PHASE_MAX_RESAMPLING']:
+                    elif var.split()[0] in ['PHASE_MAX_RESAMPLING','TEXP']:
                         opt_dict['photometry'][c_instrument][var.split()[0]] = np.double(opt.split()[0])
                     elif var.split()[0] in ['NOMIT']:
                             nomits = opt.split()[0].split(',')

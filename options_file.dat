@@ -15,6 +15,7 @@ PHOTOMETRY OPTIONS
   WINDOW:                51
   PHOT_GET_OUTLIERS:     NO
   RESAMPLING:            NO
+  TEXP:                  0.020434
   PHASE_MAX_RESAMPLING:  0.02
   NRESAMPLING:           20
   LD_LAW:                quadratic
@@ -27,7 +28,8 @@ PHOTOMETRY OPTIONS
   PHOT_DETREND:          NO
   WINDOW:                51  
   PHOT_GET_OUTLIERS:     NO  
-  RESAMPLING:            NO  
+  RESAMPLING:            NO 
+  TEXP:                  0.020434 
   PHASE_MAX_RESAMPLING:  0.02
   NRESAMPLING:           20  
   LD_LAW:                quadratic

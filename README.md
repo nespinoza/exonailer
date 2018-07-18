@@ -127,7 +127,9 @@ The **PHOTOMETRY OPTIONS** have to be defined for each instrument. For each one,
                           to ommit. If you don't want to ommit any transit, don't put this option.
 
     RESAMPLING:           Set this to `YES` if you want to use the selective resampling scheme of Kipping (2010, MNRAS, 
-                          408, 1758), applied to 30-minute cadence Kepler lightcurves. 
+                          408, 1758), e.g., to apply it to 30-minute cadence Kepler lightcurves (or for TESS lightcurves). 
+
+    TEXP:                 Exposure time for the case in which RESAMPLING is YES. For Kepler/K2, this is 0.020434 days.
 
     PHASE_MAX_RESAMPLING: This define the maximum phase at which the data will be resampled if `RESAMPLING` is set to 
                           `YES`.
